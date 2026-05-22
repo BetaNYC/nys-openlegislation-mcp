@@ -1,4 +1,4 @@
-import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
+import { apiFetch, buildUrl, withBillUrl, type PaginatedResult } from "./api.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,11 +94,12 @@ export async function getBill(
   sessionYear: number,
   printNo: string,
   fullText = false
-): Promise<Bill> {
+): Promise<Bill & { url: string }> {
   const url = buildUrl(`/bills/${sessionYear}/${printNo}`, apiKey, {
     ...(fullText ? { view: "with_refs_no_fulltext" } : {}),
   });
-  return apiFetch<Bill>(url);
+  const bill = await apiFetch<Bill>(url);
+  return withBillUrl(bill, sessionYear);
 }
 
 export async function searchBills(
@@ -107,13 +108,17 @@ export async function searchBills(
   sessionYear?: number,
   limit = 25,
   offset = 0
-): Promise<PaginatedResult<{ result: Bill; rank: number }>> {
+): Promise<PaginatedResult<{ result: Bill & { url: string }; rank: number }>> {
   const params: Record<string, string | number> = { term, limit, offset };
   if (sessionYear) {
     params.session = sessionYear;
   }
   const url = buildUrl("/bills/search", apiKey, params);
-  return apiFetch<PaginatedResult<{ result: Bill; rank: number }>>(url);
+  const result = await apiFetch<PaginatedResult<{ result: Bill; rank: number }>>(url);
+  return {
+    ...result,
+    items: result.items.map((item) => ({ ...item, result: withBillUrl(item.result) })),
+  };
 }
 
 export async function listBills(
@@ -121,9 +126,13 @@ export async function listBills(
   sessionYear: number,
   limit = 25,
   offset = 0
-): Promise<PaginatedResult<Bill>> {
+): Promise<PaginatedResult<Bill & { url: string }>> {
   const url = buildUrl(`/bills/${sessionYear}`, apiKey, { limit, offset });
-  return apiFetch<PaginatedResult<Bill>>(url);
+  const result = await apiFetch<PaginatedResult<Bill>>(url);
+  return {
+    ...result,
+    items: result.items.map((bill) => withBillUrl(bill, sessionYear)),
+  };
 }
 
 export async function getBillVotes(

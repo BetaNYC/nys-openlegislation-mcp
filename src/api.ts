@@ -67,3 +67,18 @@ export function currentSessionYear(): number {
   const year = new Date().getFullYear();
   return year % 2 === 0 ? year - 1 : year;
 }
+
+/** URL to a bill on the NYS Open Legislation website. */
+export function billUrl(sessionYear: number, printNo: string): string {
+  return `https://legislation.nysenate.gov/bills/${sessionYear}/${printNo}`;
+}
+
+/** Attach a url field to a bill object (or any object with basePrintNo/session/printNo fields). */
+export function withBillUrl<T extends { basePrintNo?: string; printNo?: string; session?: number }>(
+  bill: T,
+  sessionYear?: number
+): T & { url: string } {
+  const printNo = bill.basePrintNo ?? bill.printNo ?? "";
+  const year = bill.session ?? sessionYear ?? currentSessionYear();
+  return { ...bill, url: billUrl(year, printNo) };
+}

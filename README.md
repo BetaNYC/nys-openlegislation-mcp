@@ -29,6 +29,8 @@ A free API key from the NYS Open Legislation portal:
 1. Register at **[legislation.nysenate.gov/register](https://legislation.nysenate.gov/register)**
 2. You'll receive an API key by email
 
+**To follow bill links in your browser:** the legislation.nysenate.gov website requires you to be logged in with your API key. Go to [legislation.nysenate.gov/public](https://legislation.nysenate.gov/public), enter your key, and bill URLs returned by this server will open directly.
+
 ---
 
 ## Installation

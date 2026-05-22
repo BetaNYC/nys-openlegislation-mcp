@@ -1,0 +1,74 @@
+import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type Member = {
+  memberId: number;
+  shortName: string;
+  sessionYear: number;
+  chamber: string;
+  incumbent: boolean;
+  fullName: string;
+  districtCode: number;
+  person: {
+    personId: number;
+    fullName: string;
+    firstName: string;
+    lastName: string;
+    middleName: string;
+    email: string;
+    officeEntries: Array<{
+      name: string;
+      street: string;
+      city: string;
+      province: string;
+      postalCode: string;
+      country: string;
+    }>;
+    prefix: string;
+    suffix: string;
+    verified: boolean;
+    imgName: string;
+  };
+};
+
+// ─── API functions ────────────────────────────────────────────────────────────
+
+export async function listMembers(
+  apiKey: string,
+  sessionYear: number,
+  chamber: "senate" | "assembly",
+  limit = 100,
+  offset = 0
+): Promise<PaginatedResult<Member>> {
+  const url = buildUrl(`/members/${sessionYear}/${chamber}`, apiKey, {
+    limit,
+    offset,
+  });
+  return apiFetch<PaginatedResult<Member>>(url);
+}
+
+export async function getMember(
+  apiKey: string,
+  sessionYear: number,
+  chamber: "senate" | "assembly",
+  memberId: number
+): Promise<Member> {
+  const url = buildUrl(`/members/${sessionYear}/${chamber}/${memberId}`, apiKey);
+  return apiFetch<Member>(url);
+}
+
+export async function searchMembers(
+  apiKey: string,
+  term: string,
+  sessionYear?: number,
+  chamber?: "senate" | "assembly",
+  limit = 25,
+  offset = 0
+): Promise<PaginatedResult<{ result: Member; rank: number }>> {
+  const params: Record<string, string | number> = { term, limit, offset };
+  if (sessionYear) params.session = sessionYear;
+  if (chamber) params.chamber = chamber;
+  const url = buildUrl("/members/search", apiKey, params);
+  return apiFetch<PaginatedResult<{ result: Member; rank: number }>>(url);
+}

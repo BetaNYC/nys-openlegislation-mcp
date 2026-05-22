@@ -1,0 +1,56 @@
+{
+  "name": "@betanyc/nys-openlegislation-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for New York State legislation via the NYS Open Legislation API",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-assistant",
+    "new-york",
+    "new-york-state",
+    "nys",
+    "civic-tech",
+    "open-data",
+    "open-government",
+    "betanyc",
+    "legislation",
+    "bills",
+    "laws",
+    "senate",
+    "assembly",
+    "state-legislature",
+    "open-legislation",
+    "nysenate"
+  ],
+  "license": "MIT",
+  "author": "BetaNYC",
+  "homepage": "https://github.com/BetaNYC/nys-openlegislation-mcp",
+  "bugs": {
+    "url": "https://github.com/BetaNYC/nys-openlegislation-mcp/issues"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "nys-openlegislation-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

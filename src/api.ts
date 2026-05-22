@@ -68,9 +68,9 @@ export function currentSessionYear(): number {
   return year % 2 === 0 ? year - 1 : year;
 }
 
-/** URL to a bill on the NYS Open Legislation website. */
+/** URL to a bill on the NYS Senate public website. */
 export function billUrl(sessionYear: number, printNo: string): string {
-  return `https://legislation.nysenate.gov/bills/${sessionYear}/${printNo}`;
+  return `https://www.nysenate.gov/legislation/bills/${sessionYear}/${printNo}`;
 }
 
 /** Attach a url field to a bill object (or any object with basePrintNo/session/printNo fields). */

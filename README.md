@@ -26,7 +26,7 @@ Built by [BetaNYC](https://beta.nyc) as part of a suite of civic data MCP server
 
 A free API key from the NYS Open Legislation portal:
 
-1. Register at **[legislation.nysenate.gov/register](https://legislation.nysenate.gov/register)**
+1. Register at **[legislation.nysenate.gov/public](https://legislation.nysenate.gov/public)**
 2. You'll receive an API key by email
 
 Bill URLs returned by this server point to the public [nysenate.gov](https://www.nysenate.gov/legislation) website — no login required.

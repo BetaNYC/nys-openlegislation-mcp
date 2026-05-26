@@ -59,13 +59,14 @@ const syncState = Object.fromEntries(
 const INCLUDE_LAW_TEXT = syncState.include_law_text === "1";
 const INCLUDE_TRANSCRIPT_TEXT = syncState.include_transcript_text === "1";
 
-const lastSyncedAt = FROM_OVERRIDE ?? syncState.last_synced_at;
+// Normalize legacy space-separated timestamps (stored before ISO fix) to ISO 8601 with T.
+const lastSyncedAt = (FROM_OVERRIDE ?? syncState.last_synced_at)?.replace(" ", "T");
 if (!lastSyncedAt) {
   console.error("Error: No last_synced_at found in sync_state. Run fetch-data.js first.");
   process.exit(1);
 }
 
-const toDateTime = new Date().toISOString().replace("T", " ").split(".")[0];
+const toDateTime = new Date().toISOString().split(".")[0]; // ISO 8601 with T — required by the API
 const fromDateTime = lastSyncedAt;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

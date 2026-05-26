@@ -558,7 +558,7 @@ if (TYPES.has("calendars"))   await fetchCalendars();
 if (TYPES.has("transcripts")) await fetchTranscripts();
 
 // Persist config to sync_state
-const now = new Date().toISOString().replace("T", " ").split(".")[0];
+const now = new Date().toISOString().split(".")[0]; // ISO 8601 with T — matches sync.js expectation
 setSyncState.run("last_synced_at", now);
 setSyncState.run("start_year", String(START_YEAR));
 setSyncState.run("include_law_text", INCLUDE_LAW_TEXT ? "1" : "0");

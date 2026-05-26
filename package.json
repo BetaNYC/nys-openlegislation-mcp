@@ -1,6 +1,6 @@
 {
   "name": "@betanyc/nys-openlegislation-mcp",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "MCP server for New York State legislation via the NYS Open Legislation API",
   "keywords": [
     "mcp",

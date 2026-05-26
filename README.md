@@ -80,6 +80,64 @@ Then in your MCP config:
 
 ---
 
+## Local corpus (optional)
+
+By default the server queries the live NYS Open Legislation API on every request. If you run large workloads — bulk research, repeated searches, or offline use — you can build a local SQLite corpus that the server queries first, falling back to the API only on a cache miss.
+
+### Requirements
+
+```bash
+npm install better-sqlite3
+```
+
+`better-sqlite3` is an optional dependency. The server works without it — it just means every request goes to the live API.
+
+### 1. Fetch the initial corpus
+
+```bash
+NYS_LEGISLATION_API_KEY=your-key node scripts/fetch-data.js
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--start-year=YYYY` | `2009` | Earliest session year to fetch |
+| `--types=bills,laws,...` | all types | Comma-separated list: `bills,laws,members,committees,agendas,calendars,transcripts` |
+| `--include-law-text` | off | Fetch full text of every law section (large — adds significant download time) |
+| `--include-transcript-text` | off | Fetch full text of floor and hearing transcripts (very large) |
+| `--delay-ms=N` | `150` | Delay between API calls in ms |
+| `--dry-run` | off | Print what would be fetched without writing |
+
+The corpus lands in `data/corpus.db`. A full fetch without law or transcript text takes **2–6 hours** depending on your start year and network speed. The `--types` flag lets you fetch only what you need.
+
+### 2. Run incremental sync (nightly)
+
+```bash
+NYS_LEGISLATION_API_KEY=your-key node scripts/sync.js
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--from=YYYY-MM-DDTHH:MM:SS` | last sync time | Override the start datetime |
+| `--delay-ms=N` | `150` | Delay between API calls in ms |
+| `--dry-run` | off | Print what would be synced without writing |
+
+**Cron example** (nightly at 2am):
+```
+0 2 * * * NYS_LEGISLATION_API_KEY=your-key node /path/to/scripts/sync.js >> /var/log/nys-sync.log 2>&1
+```
+
+### How local-first works
+
+When `data/corpus.db` exists and `better-sqlite3` is available, every tool handler queries the local DB first. If the record is found locally, it returns immediately without an API call. If not found (new bill, cache miss, `has_text=0` for a transcript), it falls through to the live API transparently.
+
+Law section text and transcript full text fall back to the API unless `--include-law-text` / `--include-transcript-text` were used during the initial fetch.
+
+---
+
 ## Tools
 
 ### Bills

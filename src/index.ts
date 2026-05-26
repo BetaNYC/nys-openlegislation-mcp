@@ -66,7 +66,7 @@ if (!apiKey) {
 // ─── Server ───────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "nys-openlegislation-mcp", version: "1.0.0" },
+  { name: "nys-openlegislation-mcp", version: "2.0.0" },
   { capabilities: { tools: {} } }
 );
 

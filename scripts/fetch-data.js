@@ -167,7 +167,9 @@ async function apiFetch(path, params = {}) {
   if (!res.ok) throw new Error(`API ${res.status} ${res.statusText} — ${path}`);
   const data = await res.json();
   if (!data.success) throw new Error(`API failure: ${data.message} — ${path}`);
-  return data.result;
+  // Surface top-level `total` alongside result so fetchAllPages can paginate correctly.
+  // result.size is the current page size, not the total count.
+  return { result: data.result, total: data.total ?? null };
 }
 
 async function fetchAllPages(path, params = {}, label = path) {
@@ -175,12 +177,12 @@ async function fetchAllPages(path, params = {}, label = path) {
   let offset = 0;
   const limit = 1000;
   while (true) {
-    const result = await apiFetch(path, { ...params, limit, offset });
+    const { result, total } = await apiFetch(path, { ...params, limit, offset });
     const page = Array.isArray(result) ? result : (result.items ?? []);
     items.push(...page);
-    const size = result.size ?? page.length;
-    process.stdout.write(`\r  ${label}: ${items.length} fetched…`);
-    if (page.length < limit || size <= offset + limit) break;
+    process.stdout.write(`\r  ${label}: ${items.length}${total ? `/${total}` : ""} fetched…`);
+    // Break when we've received a short page (last page) or fetched everything.
+    if (page.length < limit || (total !== null && items.length >= total)) break;
     offset += limit;
     await sleep(DELAY_MS);
   }
@@ -318,7 +320,7 @@ async function fetchBills() {
 
 async function fetchLaws() {
   console.log("\n📜 Fetching laws…");
-  const lawList = await apiFetch("/laws", { limit: 500 });
+  const { result: lawList } = await apiFetch("/laws", { limit: 500 });
   const laws = lawList.items ?? [];
   console.log(`  Found ${laws.length} law bodies`);
 
@@ -332,7 +334,7 @@ async function fetchLaws() {
 
     // Fetch tree structure (no full text here)
     try {
-      const tree = await apiFetch(`/laws/${law.lawId}`);
+      const { result: tree } = await apiFetch(`/laws/${law.lawId}`);
       // Extract sections from the tree and store metadata
       const sections = flattenLawTree(tree.documents, law.lawId);
       const insertSections = db.transaction((secs) => {
@@ -354,7 +356,7 @@ async function fetchLaws() {
         for (const sec of sections) {
           if (sec.docType !== "SECTION") continue;
           try {
-            const fullSec = await apiFetch(`/laws/${law.lawId}/${sec.locationId}`);
+            const { result: fullSec } = await apiFetch(`/laws/${law.lawId}/${sec.locationId}`);
             upsertLawSection.run({
               law_id: law.lawId,
               location_id: sec.locationId,

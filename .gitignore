@@ -3,3 +3,6 @@ dist/
 *.env
 .env
 .DS_Store
+data/corpus.db
+data/corpus.db-shm
+data/corpus.db-wal

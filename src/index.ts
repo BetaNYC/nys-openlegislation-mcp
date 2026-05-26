@@ -31,6 +31,26 @@ import {
 } from "./transcripts.js";
 import { getUpdates } from "./updates.js";
 import { search } from "./search.js";
+import {
+  localGetBill,
+  localSearchBills,
+  localListBills,
+  localListLaws,
+  localGetLawTree,
+  localGetLawSection,
+  localListMembers,
+  localGetMember,
+  localListCommittees,
+  localGetCommittee,
+  localListAgendas,
+  localGetAgenda,
+  localListCalendars,
+  localGetCalendar,
+  localListFloorTranscripts,
+  localGetFloorTranscript,
+  localListHearingTranscripts,
+  localGetHearingTranscript,
+} from "./db.js";
 
 // ─── API key ──────────────────────────────────────────────────────────────────
 
@@ -577,13 +597,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args);
-        const results = await searchBills(
-          apiKey,
-          term,
-          session_year,
-          limit ?? 25,
-          offset ?? 0
-        );
+        const local = await localSearchBills(term, session_year, limit ?? 25, offset ?? 0);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const results = await searchBills(apiKey, term, session_year, limit ?? 25, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
@@ -591,11 +607,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { print_no, session_year } = z
           .object({ print_no: z.string(), session_year: z.number().optional() })
           .parse(args);
-        const result = await getBill(
-          apiKey,
-          session_year ?? currentSessionYear(),
-          print_no
-        );
+        const year = session_year ?? currentSessionYear();
+        const local = await localGetBill(year, print_no);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const result = await getBill(apiKey, year, print_no);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
 
@@ -607,12 +622,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args ?? {});
-        const results = await listBills(
-          apiKey,
-          session_year ?? currentSessionYear(),
-          limit ?? 25,
-          offset ?? 0
-        );
+        const year = session_year ?? currentSessionYear();
+        const local = await localListBills(year, limit ?? 25, offset ?? 0);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const results = await listBills(apiKey, year, limit ?? 25, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
@@ -620,11 +633,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { print_no, session_year } = z
           .object({ print_no: z.string(), session_year: z.number().optional() })
           .parse(args);
-        const results = await getBillVotes(
-          apiKey,
-          session_year ?? currentSessionYear(),
-          print_no
-        );
+        // Votes always fetched live — they change frequently
+        const results = await getBillVotes(apiKey, session_year ?? currentSessionYear(), print_no);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
@@ -637,18 +647,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args);
+        // Updates always fetched live by design
         const results = await getBillUpdates(apiKey, from, to, limit ?? 50, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
       // ── Laws ────────────────────────────────────────────────────────────────
       case "list_laws": {
+        const local = await localListLaws();
+        if (local) return { content: [{ type: "text", text: withDisclaimer({ items: local, size: local.length }) }] };
         const results = await listLaws(apiKey);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
       case "get_law_tree": {
         const { law_id } = z.object({ law_id: z.string() }).parse(args);
+        const local = await localGetLawTree(law_id);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
         const result = await getLawTree(apiKey, law_id.toUpperCase());
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -657,6 +672,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { law_id, location_id } = z
           .object({ law_id: z.string(), location_id: z.string() })
           .parse(args);
+        const local = await localGetLawSection(law_id, location_id);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
         const result = await getLawSection(apiKey, law_id.toUpperCase(), location_id);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -671,13 +688,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args);
-        const results = await listMembers(
-          apiKey,
-          session_year ?? currentSessionYear(),
-          chamber,
-          limit ?? 100,
-          offset ?? 0
-        );
+        const year = session_year ?? currentSessionYear();
+        const local = await localListMembers(year, chamber, limit ?? 100, offset ?? 0);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const results = await listMembers(apiKey, year, chamber, limit ?? 100, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
@@ -689,12 +703,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             session_year: z.number().optional(),
           })
           .parse(args);
-        const result = await getMember(
-          apiKey,
-          session_year ?? currentSessionYear(),
-          chamber,
-          member_id
-        );
+        const year = session_year ?? currentSessionYear();
+        const local = await localGetMember(year, chamber, member_id);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const result = await getMember(apiKey, year, chamber, member_id);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
 
@@ -708,14 +720,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args);
-        const results = await searchMembers(
-          apiKey,
-          term,
-          session_year,
-          chamber,
-          limit ?? 25,
-          offset ?? 0
-        );
+        // Member search always hits API (no local FTS for members)
+        const results = await searchMembers(apiKey, term, session_year, chamber, limit ?? 25, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
@@ -729,13 +735,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args);
-        const results = await listCommittees(
-          apiKey,
-          session_year ?? currentSessionYear(),
-          chamber,
-          limit ?? 100,
-          offset ?? 0
-        );
+        const year = session_year ?? currentSessionYear();
+        const local = await localListCommittees(year, chamber, limit ?? 100, offset ?? 0);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const results = await listCommittees(apiKey, year, chamber, limit ?? 100, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
@@ -747,12 +750,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             session_year: z.number().optional(),
           })
           .parse(args);
-        const result = await getCommittee(
-          apiKey,
-          session_year ?? currentSessionYear(),
-          chamber,
-          committee_name
-        );
+        const year = session_year ?? currentSessionYear();
+        const local = await localGetCommittee(year, chamber, committee_name);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const result = await getCommittee(apiKey, year, chamber, committee_name);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
 
@@ -766,6 +767,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args);
+        // Meeting history is always fetched live — schedule changes frequently
         const results = await getCommitteeMeetings(
           apiKey,
           session_year ?? currentSessionYear(),
@@ -786,12 +788,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args ?? {});
-        const results = await listCalendars(
-          apiKey,
-          year ?? new Date().getFullYear(),
-          limit ?? 50,
-          offset ?? 0
-        );
+        const calYear = year ?? new Date().getFullYear();
+        const local = await localListCalendars(calYear, limit ?? 50, offset ?? 0);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const results = await listCalendars(apiKey, calYear, limit ?? 50, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
@@ -799,6 +799,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { year, calendar_no } = z
           .object({ year: z.number(), calendar_no: z.number() })
           .parse(args);
+        const local = await localGetCalendar(year, calendar_no);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
         const result = await getCalendar(apiKey, year, calendar_no);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -812,12 +814,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args ?? {});
-        const results = await listAgendas(
-          apiKey,
-          year ?? new Date().getFullYear(),
-          limit ?? 50,
-          offset ?? 0
-        );
+        const agYear = year ?? new Date().getFullYear();
+        const local = await localListAgendas(agYear, limit ?? 50, offset ?? 0);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const results = await listAgendas(apiKey, agYear, limit ?? 50, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
@@ -825,6 +825,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { year, agenda_no } = z
           .object({ year: z.number(), agenda_no: z.number() })
           .parse(args);
+        const local = await localGetAgenda(year, agenda_no);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
         const result = await getAgenda(apiKey, year, agenda_no);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -838,17 +840,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args ?? {});
-        const results = await listFloorTranscripts(
-          apiKey,
-          year ?? new Date().getFullYear(),
-          limit ?? 50,
-          offset ?? 0
-        );
+        const ftYear = year ?? new Date().getFullYear();
+        const local = await localListFloorTranscripts(ftYear, limit ?? 50, offset ?? 0);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const results = await listFloorTranscripts(apiKey, ftYear, limit ?? 50, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
       case "get_floor_transcript": {
         const { date_time } = z.object({ date_time: z.string() }).parse(args);
+        // Returns null from local if text wasn't fetched (--include-transcript-text not used)
+        const local = await localGetFloorTranscript(date_time);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
         const result = await getFloorTranscript(apiKey, date_time);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -861,17 +864,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             offset: z.number().optional(),
           })
           .parse(args ?? {});
-        const results = await listHearingTranscripts(
-          apiKey,
-          year ?? new Date().getFullYear(),
-          limit ?? 50,
-          offset ?? 0
-        );
+        const htYear = year ?? new Date().getFullYear();
+        const local = await localListHearingTranscripts(htYear, limit ?? 50, offset ?? 0);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const results = await listHearingTranscripts(apiKey, htYear, limit ?? 50, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
       case "get_hearing_transcript": {
         const { filename } = z.object({ filename: z.string() }).parse(args);
+        // Returns null from local if text wasn't fetched (--include-transcript-text not used)
+        const local = await localGetHearingTranscript(filename);
+        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
         const result = await getHearingTranscript(apiKey, filename);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }

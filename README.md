@@ -18,7 +18,7 @@ Built by [BetaNYC](https://beta.nyc) as part of a suite of civic data MCP server
 | **Agendas** | List and get committee agendas with vote records |
 | **Transcripts** | Floor session and public hearing transcripts |
 | **Updates** | Aggregate change feed across all content types |
-| **Search** | Full-text ElasticSearch across all content |
+| **Search** | Full-text ElasticSearch within a content type (bills, laws, agendas, calendars, transcripts, hearings) |
 
 ---
 
@@ -197,7 +197,7 @@ Law section text and transcript full text fall back to the API unless `--include
 | Tool | Description |
 |---|---|
 | `get_updates` | Aggregate change feed across all content types for a date range |
-| `search` | Full-text search across bills, laws, agendas, calendars, and transcripts |
+| `search` | Full-text search within one content type — `bills` (default), `laws`, `agendas`, `calendars`, `transcripts`, `hearings`. One type per call; the upstream API has no unified search endpoint. Search resolutions via `type: "bills"`. |
 
 ---
 

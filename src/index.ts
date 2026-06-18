@@ -552,10 +552,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "search",
       description:
-        "Full-text search across all NYS Open Legislation content — bills, resolutions, laws, " +
-        "agendas, calendars, and transcripts — using ElasticSearch syntax. " +
+        "Full-text search within one NYS Open Legislation content type using ElasticSearch syntax. " +
+        "The upstream API has no unified search endpoint — each content type is searched separately, " +
+        "so this tool searches a single type per call (defaults to bills). " +
+        "Supported types: bills, laws, agendas, calendars, transcripts, hearings. " +
         "Supports boolean operators (AND, OR, NOT), phrase quotes, wildcards, and field targeting. " +
-        "Use the type filter to restrict results to a single content category.",
+        "To search resolutions, use type 'bills' (they share the bills index).",
       inputSchema: {
         type: "object",
         properties: {
@@ -565,7 +567,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           type: {
             type: "string",
-            description: "Filter by content type: bills, laws, agendas, calendars, transcripts (optional)",
+            description:
+              "Content type to search: bills (default), laws, agendas, calendars, transcripts, hearings. " +
+              "One type per call.",
+            enum: ["bills", "laws", "agendas", "calendars", "transcripts", "hearings"],
           },
           session_year: {
             type: "number",

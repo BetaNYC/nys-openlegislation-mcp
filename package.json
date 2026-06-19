@@ -50,6 +50,9 @@
     "better-sqlite3": "^12.10.0",
     "zod": "^3.23.0"
   },
+  "overrides": {
+    "hono": ">=4.12.25 <5"
+  },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.0.0",

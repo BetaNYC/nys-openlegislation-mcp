@@ -242,6 +242,10 @@ Results are sourced from the NYS Open Legislation API, maintained by the New Yor
 
 ---
 
+## Support our work
+
+Freedom isn't free. [Support BetaNYC](https://beta.nyc/donate/).
+
 ## License
 
 MIT © [BetaNYC](https://beta.nyc)

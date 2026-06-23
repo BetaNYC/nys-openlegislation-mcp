@@ -22,12 +22,13 @@ Built by [BetaNYC](https://beta.nyc) as part of a suite of civic data MCP server
 
 ---
 
-## Requirements
+## API key
 
-A free API key from the NYS Open Legislation portal:
+**Yes — a free API key is required.** Get one from the NYS Open Legislation portal and set it as the `NYS_LEGISLATION_API_KEY` environment variable:
 
 1. Register at **[legislation.nysenate.gov/public](https://legislation.nysenate.gov/public)**
 2. You'll receive an API key by email
+3. Set it as `NYS_LEGISLATION_API_KEY` (e.g. `export NYS_LEGISLATION_API_KEY="your-api-key"`), or pass it in your MCP client's `env` block — see [Installation](#installation)
 
 Bill URLs returned by this server point to the public [nysenate.gov](https://www.nysenate.gov/legislation) website — no login required.
 
@@ -240,6 +241,10 @@ Results are sourced from the NYS Open Legislation API, maintained by the New Yor
 | [nyc-charter-laws-rules](https://github.com/BetaNYC/nyc-charter-laws-rules) | `@betanyc/nyc-charter-laws-rules` | NYC Charter, Administrative Code, Rules |
 
 ---
+
+## Support our work
+
+Freedom isn't free. [Support BetaNYC](https://beta.nyc/donate/).
 
 ## License
 

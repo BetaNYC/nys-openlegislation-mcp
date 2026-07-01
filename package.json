@@ -43,7 +43,7 @@
     "prepare": "npm run build",
     "fetch-data": "node scripts/fetch-data.js",
     "sync": "node scripts/sync.js",
-    "test": "npm run build && node --test \"test/**/*.test.js\""
+    "test": "npm run build && node --test test/*.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

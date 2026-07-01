@@ -1,0 +1,56 @@
+name: CI
+
+# Test gate for @betanyc/nys-openlegislation-mcp, mirroring BetaNYC's
+# engineering standards (platform/system/engineering-standards.md in the main
+# workspace). Enforces that the package builds cleanly and its hermetic test
+# suite (`npm test`, which runs `tsc` then `node --test`) passes at BOTH ends of
+# the declared Node range before code lands on main.
+#
+# Version safety: package.json declares `engines.node: ">=18"` with no ceiling,
+# so we test the floor (18) and current LTS (22). Drift between them fails here,
+# before merge. The tests are offline — dependencies.test.js reads only
+# package.json/package-lock.json, search.test.js mocks `fetch` — so no API key
+# or data/corpus.db is required in CI.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.ts"
+      - "**/*.js"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "**/*.ts"
+      - "**/*.js"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The ends of the declared range in package.json (engines.node: ">=18").
+        # 18 = floor, 22 = current Node LTS ceiling.
+        node-version: ["18", "22"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build and test
+        run: npm test

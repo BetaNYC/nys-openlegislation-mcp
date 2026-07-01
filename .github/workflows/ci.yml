@@ -6,11 +6,15 @@ name: CI
 # suite (`npm test`, which runs `tsc` then `node --test`) passes at BOTH ends of
 # the declared Node range before code lands on main.
 #
-# Version safety: package.json declares `engines.node: ">=18"` with no ceiling,
-# so we test the floor (18) and current LTS (22). Drift between them fails here,
-# before merge. The tests are offline — dependencies.test.js reads only
-# package.json/package-lock.json, search.test.js mocks `fetch` — so no API key
-# or data/corpus.db is required in CI.
+# Version safety: package.json declares `engines.node: ">=18"` with no ceiling.
+# We test 20 and 22 — the actively-maintained LTS releases within that range.
+# Node 18 reached End-of-Life on 2025-04-30 and is excluded intentionally, so CI
+# only exercises supported runtimes; this matches the rest of BetaNYC's
+# TypeScript MCP fleet (nyc-charter-laws-rules/.github/workflows/test.yml is the
+# canonical precedent). If the engines floor is raised to >=20 in a future
+# release, this comment can be removed. The tests are offline —
+# dependencies.test.js reads only package.json/package-lock.json,
+# search.test.js mocks `fetch` — so no API key or data/corpus.db is required in CI.
 
 on:
   pull_request:
@@ -40,9 +44,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The ends of the declared range in package.json (engines.node: ">=18").
-        # 18 = floor, 22 = current Node LTS ceiling.
-        node-version: ["18", "22"]
+        # Actively-maintained LTS releases within engines.node: ">=18".
+        # 20 = LTS floor tested, 22 = current LTS ceiling. Node 18 is EOL
+        # (2025-04-30) and excluded — see the header comment.
+        node-version: ["20", "22"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Node ${{ matrix.node-version }}

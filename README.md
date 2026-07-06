@@ -36,6 +36,8 @@ Bill URLs returned by this server point to the public [nysenate.gov](https://www
 
 ## Installation
 
+Requires **Node.js 20 or newer**.
+
 ### Use with Claude Desktop (recommended)
 
 **No global install needed.** Add to your Claude Desktop config and `npx` handles the rest.
@@ -87,11 +89,15 @@ By default the server queries the live NYS Open Legislation API on every request
 
 ### Requirements
 
+The fetch and sync scripts (`scripts/`) are **not included in the npm package** — building a local corpus requires a git clone:
+
 ```bash
-npm install better-sqlite3
+git clone https://github.com/BetaNYC/nys-openlegislation-mcp.git
+cd nys-openlegislation-mcp
+npm install
 ```
 
-`better-sqlite3` is an optional dependency. The server works without it — it just means every request goes to the live API.
+`better-sqlite3` is an optional dependency. The server works without it — it just means every request goes to the live API. If its native build was skipped, install it explicitly with `npm install better-sqlite3`.
 
 ### 1. Fetch the initial corpus
 

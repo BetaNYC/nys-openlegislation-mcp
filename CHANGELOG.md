@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-07-06
+
 ### Fixed
 
 - Search now routes to the per-type `/{type}/search` endpoints; the nonexistent
@@ -18,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Live search smoke tests (`test/search.live.test.js`) exercising the per-type
+  search routes against the real API; skipped when `NYS_LEGISLATION_API_KEY`
+  is not set.
 - GitHub Actions CI test gate on the supported Node LTS matrix (#4).
 - Tag-triggered release automation: pushing a `v*` tag publishes to npm with
   provenance and creates a GitHub Release.
@@ -59,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Legislation API — bills, laws, members, committees, calendars, agendas,
   transcripts, updates, and search.
 
-[Unreleased]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v1.0.0...v1.0.1

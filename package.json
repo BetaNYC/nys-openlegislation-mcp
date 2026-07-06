@@ -25,6 +25,10 @@
   "license": "MIT",
   "author": "BetaNYC",
   "homepage": "https://github.com/BetaNYC/nys-openlegislation-mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BetaNYC/nys-openlegislation-mcp.git"
+  },
   "bugs": {
     "url": "https://github.com/BetaNYC/nys-openlegislation-mcp/issues"
   },

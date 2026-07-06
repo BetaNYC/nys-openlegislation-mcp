@@ -1,22 +1,5 @@
 import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export type FloorTranscript = {
-  dateTime: string;
-  sessionType: string;
-  text: string;
-  filename: string;
-};
-
-export type HearingTranscript = {
-  filename: string;
-  date: string;
-  title: string;
-  address: string;
-  text: string;
-};
-
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function listFloorTranscripts(
@@ -24,18 +7,18 @@ export async function listFloorTranscripts(
   year: number,
   limit = 50,
   offset = 0
-): Promise<PaginatedResult<FloorTranscript>> {
+): Promise<unknown> {
   const url = buildUrl(`/transcripts/floor/${year}`, apiKey, { limit, offset });
-  return apiFetch<PaginatedResult<FloorTranscript>>(url);
+  return apiFetch<PaginatedResult<unknown>>(url);
 }
 
 export async function getFloorTranscript(
   apiKey: string,
   dateTime: string
-): Promise<FloorTranscript> {
+): Promise<unknown> {
   // dateTime format: ISO-8601, e.g. "2025-01-15T10:30:00"
   const url = buildUrl(`/transcripts/floor/${encodeURIComponent(dateTime)}`, apiKey);
-  return apiFetch<FloorTranscript>(url);
+  return apiFetch<unknown>(url);
 }
 
 export async function listHearingTranscripts(
@@ -43,15 +26,15 @@ export async function listHearingTranscripts(
   year: number,
   limit = 50,
   offset = 0
-): Promise<PaginatedResult<HearingTranscript>> {
+): Promise<unknown> {
   const url = buildUrl(`/transcripts/hearing/${year}`, apiKey, { limit, offset });
-  return apiFetch<PaginatedResult<HearingTranscript>>(url);
+  return apiFetch<PaginatedResult<unknown>>(url);
 }
 
 export async function getHearingTranscript(
   apiKey: string,
   filename: string
-): Promise<HearingTranscript> {
+): Promise<unknown> {
   const url = buildUrl(`/transcripts/hearing/${encodeURIComponent(filename)}`, apiKey);
-  return apiFetch<HearingTranscript>(url);
+  return apiFetch<unknown>(url);
 }

@@ -1,10 +1,6 @@
 #!/usr/bin/env node
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { withDisclaimer, currentSessionYear } from "./api.js";
 import {
@@ -13,6 +9,7 @@ import {
   listBills,
   getBillVotes,
   getBillUpdates,
+  getUpdates,
 } from "./bills.js";
 import { listLaws, getLawTree, getLawSection } from "./laws.js";
 import { listMembers, getMember, searchMembers } from "./members.js";
@@ -29,7 +26,6 @@ import {
   listHearingTranscripts,
   getHearingTranscript,
 } from "./transcripts.js";
-import { getUpdates } from "./updates.js";
 import { search } from "./search.js";
 import {
   localGetBill,
@@ -62,884 +58,448 @@ if (!apiKey) {
   );
   process.exit(1);
 }
+const key = apiKey; // narrowed to string for closures below
 
-// ─── Server ───────────────────────────────────────────────────────────────────
+// ─── Shared schema fragments ──────────────────────────────────────────────────
 
-const server = new Server(
+const sessionYear = z
+  .number()
+  .optional()
+  .describe("Session year (odd-numbered, e.g. 2025). Defaults to current session.");
+const chamber = z
+  .enum(["senate", "assembly"])
+  .describe("Which chamber the member belongs to");
+const limit = (dflt: number, max?: number) => {
+  const base = max ? z.number().max(max) : z.number();
+  return base
+    .optional()
+    .describe(`Max results (default ${dflt}${max ? `, max ${max}` : ""})`);
+};
+const offset = z.number().optional().describe("Pagination offset (default 0)");
+const calYear = z
+  .number()
+  .optional()
+  .describe("Calendar year (e.g. 2025). Defaults to current year.");
+
+// ─── Tool table ───────────────────────────────────────────────────────────────
+//
+// Each row declares a tool once: name, description, zod input schema, an
+// optional local-corpus function, and the live-API function. The dispatcher
+// tries `local` first (any non-null result wins) and falls back to `live`.
+
+type ToolRow = {
+  name: string;
+  description: string;
+  schema: Record<string, z.ZodTypeAny>;
+  local?: (args: Record<string, any>) => Promise<unknown | null>;
+  live: (args: Record<string, any>) => Promise<unknown>;
+};
+
+const session = (a: Record<string, any>) => a.session_year ?? currentSessionYear();
+const year = (a: Record<string, any>) => a.year ?? new Date().getFullYear();
+
+const TOOLS: ToolRow[] = [
+  // ── Bills ───────────────────────────────────────────────────────────────────
+  {
+    name: "search_bills",
+    description:
+      "Search NYS legislation by keyword using ElasticSearch syntax. " +
+      "Searches bill titles, summaries, and full text. Supports boolean operators " +
+      "(AND, OR, NOT), phrase quotes, wildcards, and field targeting " +
+      "(e.g. title:\"climate\" AND sponsor:Krueger). " +
+      "Optionally filter by session year (odd-numbered years: 2023, 2025, etc.).",
+    schema: {
+      term: z.string().describe("Search term or ElasticSearch query string"),
+      session_year: z
+        .number()
+        .optional()
+        .describe("Legislative session year (odd-numbered, e.g. 2025). Defaults to current session."),
+      limit: limit(25, 100),
+      offset,
+    },
+    local: (a) => localSearchBills(a.term, a.session_year, a.limit ?? 25, a.offset ?? 0),
+    live: (a) => searchBills(key, a.term, a.session_year, a.limit ?? 25, a.offset ?? 0),
+  },
+  {
+    name: "get_bill",
+    description:
+      "Get a specific NYS bill by print number and session year. " +
+      "Print numbers are in the format S1234 (Senate) or A1234 (Assembly). " +
+      "Returns full bill details including status, sponsor, summary, actions, and votes.",
+    schema: {
+      print_no: z.string().describe("Bill print number, e.g. 'S1234' or 'A5678'"),
+      session_year: sessionYear,
+    },
+    local: (a) => localGetBill(session(a), a.print_no),
+    live: (a) => getBill(key, session(a), a.print_no),
+  },
+  {
+    name: "list_bills",
+    description:
+      "List bills introduced in a given NYS legislative session year, in order of introduction.",
+    schema: {
+      session_year: sessionYear,
+      limit: limit(25, 500),
+      offset,
+    },
+    local: (a) => localListBills(session(a), a.limit ?? 25, a.offset ?? 0),
+    live: (a) => listBills(key, session(a), a.limit ?? 25, a.offset ?? 0),
+  },
+  {
+    name: "get_bill_votes",
+    description:
+      "Get all recorded votes on a specific NYS bill, including committee and floor votes. " +
+      "Returns each member's vote (Aye, Nay, Abstain, Absent, etc.).",
+    schema: {
+      print_no: z.string().describe("Bill print number, e.g. 'S1234'"),
+      session_year: sessionYear,
+    },
+    // Votes always fetched live — they change frequently
+    live: (a) => getBillVotes(key, session(a), a.print_no),
+  },
+  {
+    name: "get_bill_updates",
+    description:
+      "Get a feed of bill changes within a date range — useful for tracking what was introduced, " +
+      "amended, or acted on during a specific period.",
+    schema: {
+      from: z
+        .string()
+        .describe("Start datetime, ISO-8601 format: 'YYYY-MM-DDTHH:MM:SS' (e.g. '2025-01-01T00:00:00')"),
+      to: z.string().describe("End datetime, ISO-8601 format: 'YYYY-MM-DDTHH:MM:SS'"),
+      limit: limit(50, 500),
+      offset,
+    },
+    // Updates always fetched live by design
+    live: (a) => getBillUpdates(key, a.from, a.to, a.limit ?? 50, a.offset ?? 0),
+  },
+
+  // ── Laws ────────────────────────────────────────────────────────────────────
+  {
+    name: "list_laws",
+    description:
+      "List all law bodies in New York State — the Consolidated Laws, the NYC Administrative Code, " +
+      "the state Constitution, and other codified bodies. Returns law IDs and names.",
+    schema: {},
+    local: async () => {
+      const local = await localListLaws();
+      return local ? { items: local, size: local.length } : null;
+    },
+    live: () => listLaws(key),
+  },
+  {
+    name: "get_law_tree",
+    description:
+      "Get the hierarchical table of contents for a specific NYS law body. " +
+      "Use list_laws to find the law ID (e.g. 'EDN' for Education Law, 'LAB' for Labor Law). " +
+      "Returns the document tree with titles and location IDs for each section.",
+    schema: {
+      law_id: z
+        .string()
+        .describe("Law body identifier, e.g. 'EDN' (Education), 'LAB' (Labor), 'ENV' (Environmental). Use list_laws to find IDs."),
+    },
+    local: (a) => localGetLawTree(a.law_id),
+    live: (a) => getLawTree(key, a.law_id.toUpperCase()),
+  },
+  {
+    name: "get_law_section",
+    description:
+      "Get the text of a specific section within an NYS law body. " +
+      "Use get_law_tree to find the location ID for the section you need.",
+    schema: {
+      law_id: z.string().describe("Law body identifier, e.g. 'EDN'"),
+      location_id: z
+        .string()
+        .describe("Section location ID from the law tree, e.g. 'A1S1' or '701'"),
+    },
+    local: (a) => localGetLawSection(a.law_id, a.location_id),
+    live: (a) => getLawSection(key, a.law_id.toUpperCase(), a.location_id),
+  },
+
+  // ── Members ─────────────────────────────────────────────────────────────────
+  {
+    name: "list_members",
+    description:
+      "List all members of the NYS Senate or Assembly for a given session year. " +
+      "Returns member IDs, names, districts, and contact information.",
+    schema: {
+      chamber: z
+        .enum(["senate", "assembly"])
+        .describe("Which chamber to list (senate or assembly)"),
+      session_year: sessionYear,
+      limit: limit(100),
+      offset,
+    },
+    local: (a) => localListMembers(session(a), a.chamber, a.limit ?? 100, a.offset ?? 0),
+    live: (a) => listMembers(key, session(a), a.chamber, a.limit ?? 100, a.offset ?? 0),
+  },
+  {
+    name: "get_member",
+    description:
+      "Get a specific NYS legislator by their member ID. " +
+      "Returns full profile including name, district, contact info, and party.",
+    schema: {
+      member_id: z
+        .number()
+        .describe("Numeric member ID (from list_members or search_members)"),
+      chamber,
+      session_year: sessionYear,
+    },
+    local: (a) => localGetMember(session(a), a.chamber, a.member_id),
+    live: (a) => getMember(key, session(a), a.chamber, a.member_id),
+  },
+  {
+    name: "search_members",
+    description:
+      "Search for NYS legislators by name or keyword. " +
+      "Optionally filter by chamber or session year.",
+    schema: {
+      term: z.string().describe("Name or keyword to search"),
+      chamber: z
+        .enum(["senate", "assembly"])
+        .optional()
+        .describe("Filter by chamber (optional)"),
+      session_year: sessionYear,
+      limit: limit(25),
+      offset,
+    },
+    // Member search always hits API (no local FTS for members)
+    live: (a) => searchMembers(key, a.term, a.session_year, a.chamber, a.limit ?? 25, a.offset ?? 0),
+  },
+
+  // ── Committees ──────────────────────────────────────────────────────────────
+  {
+    name: "list_committees",
+    description:
+      "List all committees in the NYS Senate or Assembly for a given session year.",
+    schema: {
+      chamber: z
+        .enum(["senate", "assembly"])
+        .describe("Which chamber's committees to list"),
+      session_year: sessionYear,
+      limit: limit(100),
+      offset,
+    },
+    local: (a) => localListCommittees(session(a), a.chamber, a.limit ?? 100, a.offset ?? 0),
+    live: (a) => listCommittees(key, session(a), a.chamber, a.limit ?? 100, a.offset ?? 0),
+  },
+  {
+    name: "get_committee",
+    description:
+      "Get details for a specific NYS committee — chair, meeting schedule, location, and subcommittees.",
+    schema: {
+      committee_name: z
+        .string()
+        .describe("Full committee name, e.g. 'Finance', 'Codes', 'Health'"),
+      chamber: z
+        .enum(["senate", "assembly"])
+        .describe("Which chamber the committee belongs to"),
+      session_year: sessionYear,
+    },
+    local: (a) => localGetCommittee(session(a), a.chamber, a.committee_name),
+    live: (a) => getCommittee(key, session(a), a.chamber, a.committee_name),
+  },
+  {
+    name: "get_committee_meetings",
+    description:
+      "Get the meeting history and upcoming meetings for a specific NYS committee, " +
+      "including bills considered at each meeting.",
+    schema: {
+      committee_name: z.string().describe("Full committee name, e.g. 'Finance'"),
+      chamber: z
+        .enum(["senate", "assembly"])
+        .describe("Which chamber the committee belongs to"),
+      session_year: sessionYear,
+      limit: limit(25),
+      offset,
+    },
+    // Meeting history is always fetched live — schedule changes frequently
+    live: (a) =>
+      getCommitteeMeetings(key, session(a), a.chamber, a.committee_name, a.limit ?? 25, a.offset ?? 0),
+  },
+
+  // ── Calendars ───────────────────────────────────────────────────────────────
+  {
+    name: "list_calendars",
+    description:
+      "List Senate floor calendars for a given year. " +
+      "Floor calendars show which bills are scheduled for floor votes.",
+    schema: { year: calYear, limit: limit(50), offset },
+    local: (a) => localListCalendars(year(a), a.limit ?? 50, a.offset ?? 0),
+    live: (a) => listCalendars(key, year(a), a.limit ?? 50, a.offset ?? 0),
+  },
+  {
+    name: "get_calendar",
+    description:
+      "Get a specific Senate floor calendar by year and calendar number. " +
+      "Returns active lists and supplemental calendars showing bills scheduled for floor votes.",
+    schema: {
+      year: z.number().describe("Calendar year (e.g. 2025)"),
+      calendar_no: z.number().describe("Calendar number within the year"),
+    },
+    local: (a) => localGetCalendar(a.year, a.calendar_no),
+    live: (a) => getCalendar(key, a.year, a.calendar_no),
+  },
+
+  // ── Agendas ─────────────────────────────────────────────────────────────────
+  {
+    name: "list_agendas",
+    description:
+      "List committee agendas for a given year. " +
+      "Agendas show committee meeting schedules and which bills were considered.",
+    schema: { year: calYear, limit: limit(50), offset },
+    local: (a) => localListAgendas(year(a), a.limit ?? 50, a.offset ?? 0),
+    live: (a) => listAgendas(key, year(a), a.limit ?? 50, a.offset ?? 0),
+  },
+  {
+    name: "get_agenda",
+    description:
+      "Get a specific committee agenda by year and agenda number. " +
+      "Returns committee meetings, bills considered, and vote records.",
+    schema: {
+      year: z.number().describe("Calendar year (e.g. 2025)"),
+      agenda_no: z.number().describe("Agenda number within the year"),
+    },
+    local: (a) => localGetAgenda(a.year, a.agenda_no),
+    live: (a) => getAgenda(key, a.year, a.agenda_no),
+  },
+
+  // ── Transcripts ─────────────────────────────────────────────────────────────
+  {
+    name: "list_floor_transcripts",
+    description: "List NYS Senate floor session transcripts for a given year.",
+    schema: {
+      year: z
+        .number()
+        .optional()
+        .describe("Year of the transcripts (e.g. 2025). Defaults to current year."),
+      limit: limit(50),
+      offset,
+    },
+    local: (a) => localListFloorTranscripts(year(a), a.limit ?? 50, a.offset ?? 0),
+    live: (a) => listFloorTranscripts(key, year(a), a.limit ?? 50, a.offset ?? 0),
+  },
+  {
+    name: "get_floor_transcript",
+    description:
+      "Get a specific NYS Senate floor session transcript by its datetime. " +
+      "Use list_floor_transcripts to find datetime values.",
+    schema: {
+      date_time: z
+        .string()
+        .describe("Session datetime, ISO-8601 format: 'YYYY-MM-DDTHH:MM:SS'"),
+    },
+    // Local returns null if text wasn't fetched (--include-transcript-text not used)
+    local: (a) => localGetFloorTranscript(a.date_time),
+    live: (a) => getFloorTranscript(key, a.date_time),
+  },
+  {
+    name: "list_hearing_transcripts",
+    description: "List NYS Senate public hearing transcripts for a given year.",
+    schema: {
+      year: z
+        .number()
+        .optional()
+        .describe("Year of the transcripts (e.g. 2025). Defaults to current year."),
+      limit: limit(50),
+      offset,
+    },
+    local: (a) => localListHearingTranscripts(year(a), a.limit ?? 50, a.offset ?? 0),
+    live: (a) => listHearingTranscripts(key, year(a), a.limit ?? 50, a.offset ?? 0),
+  },
+  {
+    name: "get_hearing_transcript",
+    description:
+      "Get a specific NYS Senate public hearing transcript by its filename. " +
+      "Use list_hearing_transcripts to find filenames.",
+    schema: {
+      filename: z
+        .string()
+        .describe("Hearing transcript filename (from list_hearing_transcripts)"),
+    },
+    // Local returns null if text wasn't fetched (--include-transcript-text not used)
+    local: (a) => localGetHearingTranscript(a.filename),
+    live: (a) => getHearingTranscript(key, a.filename),
+  },
+
+  // ── Updates ─────────────────────────────────────────────────────────────────
+  {
+    name: "get_updates",
+    description:
+      "Get aggregate updates across all NYS Open Legislation content types for a date range. " +
+      "Useful for polling what changed — new bills, amendments, votes, agendas, etc. " +
+      "Optionally filter by content type: bills, agendas, calendars, laws.",
+    schema: {
+      from: z.string().describe("Start datetime, ISO-8601: 'YYYY-MM-DDTHH:MM:SS'"),
+      to: z.string().describe("End datetime, ISO-8601: 'YYYY-MM-DDTHH:MM:SS'"),
+      type: z
+        .string()
+        .optional()
+        .describe("Filter by content type: bills, agendas, calendars, laws (optional)"),
+      limit: limit(50),
+      offset,
+    },
+    live: (a) => getUpdates(key, a.from, a.to, a.type, a.limit ?? 50, a.offset ?? 0),
+  },
+
+  // ── Search ──────────────────────────────────────────────────────────────────
+  {
+    name: "search",
+    description:
+      "Full-text search within one NYS Open Legislation content type using ElasticSearch syntax. " +
+      "The upstream API has no unified search endpoint — each content type is searched separately, " +
+      "so this tool searches a single type per call (defaults to bills). " +
+      "Supported types: bills, laws, agendas, calendars, transcripts, hearings. " +
+      "Supports boolean operators (AND, OR, NOT), phrase quotes, wildcards, and field targeting. " +
+      "To search resolutions, use type 'bills' (they share the bills index).",
+    schema: {
+      term: z
+        .string()
+        .describe("Search query (e.g. 'minimum wage', 'climate AND emissions', 'title:\"housing\"')"),
+      type: z
+        .enum(["bills", "laws", "agendas", "calendars", "transcripts", "hearings"])
+        .optional()
+        .describe(
+          "Content type to search: bills (default), laws, agendas, calendars, transcripts, hearings. " +
+            "One type per call."
+        ),
+      session_year: z
+        .number()
+        .optional()
+        .describe("Filter bills to a specific session year (optional)"),
+      limit: limit(25, 100),
+      offset,
+    },
+    live: (a) => search(key, a.term, a.type, a.session_year, a.limit ?? 25, a.offset ?? 0),
+  },
+];
+
+// ─── Server + generic dispatcher ──────────────────────────────────────────────
+
+const server = new McpServer(
   { name: "nys-openlegislation-mcp", version: "2.0.0" },
   { capabilities: { tools: {} } }
 );
 
-// ─── Tool definitions ─────────────────────────────────────────────────────────
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    // ── Bills ─────────────────────────────────────────────────────────────────
-    {
-      name: "search_bills",
-      description:
-        "Search NYS legislation by keyword using ElasticSearch syntax. " +
-        "Searches bill titles, summaries, and full text. Supports boolean operators " +
-        "(AND, OR, NOT), phrase quotes, wildcards, and field targeting " +
-        "(e.g. title:\"climate\" AND sponsor:Krueger). " +
-        "Optionally filter by session year (odd-numbered years: 2023, 2025, etc.).",
-      inputSchema: {
-        type: "object",
-        properties: {
-          term: { type: "string", description: "Search term or ElasticSearch query string" },
-          session_year: {
-            type: "number",
-            description: "Legislative session year (odd-numbered, e.g. 2025). Defaults to current session.",
-          },
-          limit: { type: "number", description: "Max results (default 25, max 100)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-        required: ["term"],
-      },
-    },
-    {
-      name: "get_bill",
-      description:
-        "Get a specific NYS bill by print number and session year. " +
-        "Print numbers are in the format S1234 (Senate) or A1234 (Assembly). " +
-        "Returns full bill details including status, sponsor, summary, actions, and votes.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          print_no: {
-            type: "string",
-            description: "Bill print number, e.g. 'S1234' or 'A5678'",
-          },
-          session_year: {
-            type: "number",
-            description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
-          },
-        },
-        required: ["print_no"],
-      },
-    },
-    {
-      name: "list_bills",
-      description:
-        "List bills introduced in a given NYS legislative session year, in order of introduction.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          session_year: {
-            type: "number",
-            description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
-          },
-          limit: { type: "number", description: "Max results (default 25, max 500)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-      },
-    },
-    {
-      name: "get_bill_votes",
-      description:
-        "Get all recorded votes on a specific NYS bill, including committee and floor votes. " +
-        "Returns each member's vote (Aye, Nay, Abstain, Absent, etc.).",
-      inputSchema: {
-        type: "object",
-        properties: {
-          print_no: {
-            type: "string",
-            description: "Bill print number, e.g. 'S1234'",
-          },
-          session_year: {
-            type: "number",
-            description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
-          },
-        },
-        required: ["print_no"],
-      },
-    },
-    {
-      name: "get_bill_updates",
-      description:
-        "Get a feed of bill changes within a date range — useful for tracking what was introduced, " +
-        "amended, or acted on during a specific period.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          from: {
-            type: "string",
-            description: "Start datetime, ISO-8601 format: 'YYYY-MM-DDTHH:MM:SS' (e.g. '2025-01-01T00:00:00')",
-          },
-          to: {
-            type: "string",
-            description: "End datetime, ISO-8601 format: 'YYYY-MM-DDTHH:MM:SS'",
-          },
-          limit: { type: "number", description: "Max results (default 50, max 500)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-        required: ["from", "to"],
-      },
-    },
-
-    // ── Laws ──────────────────────────────────────────────────────────────────
-    {
-      name: "list_laws",
-      description:
-        "List all law bodies in New York State — the Consolidated Laws, the NYC Administrative Code, " +
-        "the state Constitution, and other codified bodies. Returns law IDs and names.",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    {
-      name: "get_law_tree",
-      description:
-        "Get the hierarchical table of contents for a specific NYS law body. " +
-        "Use list_laws to find the law ID (e.g. 'EDN' for Education Law, 'LAB' for Labor Law). " +
-        "Returns the document tree with titles and location IDs for each section.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          law_id: {
-            type: "string",
-            description: "Law body identifier, e.g. 'EDN' (Education), 'LAB' (Labor), 'ENV' (Environmental). Use list_laws to find IDs.",
-          },
-        },
-        required: ["law_id"],
-      },
-    },
-    {
-      name: "get_law_section",
-      description:
-        "Get the text of a specific section within an NYS law body. " +
-        "Use get_law_tree to find the location ID for the section you need.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          law_id: {
-            type: "string",
-            description: "Law body identifier, e.g. 'EDN'",
-          },
-          location_id: {
-            type: "string",
-            description: "Section location ID from the law tree, e.g. 'A1S1' or '701'",
-          },
-        },
-        required: ["law_id", "location_id"],
-      },
-    },
-
-    // ── Members ───────────────────────────────────────────────────────────────
-    {
-      name: "list_members",
-      description:
-        "List all members of the NYS Senate or Assembly for a given session year. " +
-        "Returns member IDs, names, districts, and contact information.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          chamber: {
-            type: "string",
-            enum: ["senate", "assembly"],
-            description: "Which chamber to list (senate or assembly)",
-          },
-          session_year: {
-            type: "number",
-            description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
-          },
-          limit: { type: "number", description: "Max results (default 100)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-        required: ["chamber"],
-      },
-    },
-    {
-      name: "get_member",
-      description:
-        "Get a specific NYS legislator by their member ID. " +
-        "Returns full profile including name, district, contact info, and party.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          member_id: {
-            type: "number",
-            description: "Numeric member ID (from list_members or search_members)",
-          },
-          chamber: {
-            type: "string",
-            enum: ["senate", "assembly"],
-            description: "Which chamber the member belongs to",
-          },
-          session_year: {
-            type: "number",
-            description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
-          },
-        },
-        required: ["member_id", "chamber"],
-      },
-    },
-    {
-      name: "search_members",
-      description:
-        "Search for NYS legislators by name or keyword. " +
-        "Optionally filter by chamber or session year.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          term: { type: "string", description: "Name or keyword to search" },
-          chamber: {
-            type: "string",
-            enum: ["senate", "assembly"],
-            description: "Filter by chamber (optional)",
-          },
-          session_year: {
-            type: "number",
-            description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
-          },
-          limit: { type: "number", description: "Max results (default 25)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-        required: ["term"],
-      },
-    },
-
-    // ── Committees ────────────────────────────────────────────────────────────
-    {
-      name: "list_committees",
-      description:
-        "List all committees in the NYS Senate or Assembly for a given session year.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          chamber: {
-            type: "string",
-            enum: ["senate", "assembly"],
-            description: "Which chamber's committees to list",
-          },
-          session_year: {
-            type: "number",
-            description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
-          },
-          limit: { type: "number", description: "Max results (default 100)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-        required: ["chamber"],
-      },
-    },
-    {
-      name: "get_committee",
-      description:
-        "Get details for a specific NYS committee — chair, meeting schedule, location, and subcommittees.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          committee_name: {
-            type: "string",
-            description: "Full committee name, e.g. 'Finance', 'Codes', 'Health'",
-          },
-          chamber: {
-            type: "string",
-            enum: ["senate", "assembly"],
-            description: "Which chamber the committee belongs to",
-          },
-          session_year: {
-            type: "number",
-            description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
-          },
-        },
-        required: ["committee_name", "chamber"],
-      },
-    },
-    {
-      name: "get_committee_meetings",
-      description:
-        "Get the meeting history and upcoming meetings for a specific NYS committee, " +
-        "including bills considered at each meeting.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          committee_name: {
-            type: "string",
-            description: "Full committee name, e.g. 'Finance'",
-          },
-          chamber: {
-            type: "string",
-            enum: ["senate", "assembly"],
-            description: "Which chamber the committee belongs to",
-          },
-          session_year: {
-            type: "number",
-            description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
-          },
-          limit: { type: "number", description: "Max results (default 25)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-        required: ["committee_name", "chamber"],
-      },
-    },
-
-    // ── Calendars ─────────────────────────────────────────────────────────────
-    {
-      name: "list_calendars",
-      description:
-        "List Senate floor calendars for a given year. " +
-        "Floor calendars show which bills are scheduled for floor votes.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          year: {
-            type: "number",
-            description: "Calendar year (e.g. 2025). Defaults to current year.",
-          },
-          limit: { type: "number", description: "Max results (default 50)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-      },
-    },
-    {
-      name: "get_calendar",
-      description:
-        "Get a specific Senate floor calendar by year and calendar number. " +
-        "Returns active lists and supplemental calendars showing bills scheduled for floor votes.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          year: {
-            type: "number",
-            description: "Calendar year (e.g. 2025)",
-          },
-          calendar_no: {
-            type: "number",
-            description: "Calendar number within the year",
-          },
-        },
-        required: ["year", "calendar_no"],
-      },
-    },
-
-    // ── Agendas ───────────────────────────────────────────────────────────────
-    {
-      name: "list_agendas",
-      description:
-        "List committee agendas for a given year. " +
-        "Agendas show committee meeting schedules and which bills were considered.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          year: {
-            type: "number",
-            description: "Calendar year (e.g. 2025). Defaults to current year.",
-          },
-          limit: { type: "number", description: "Max results (default 50)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-      },
-    },
-    {
-      name: "get_agenda",
-      description:
-        "Get a specific committee agenda by year and agenda number. " +
-        "Returns committee meetings, bills considered, and vote records.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          year: {
-            type: "number",
-            description: "Calendar year (e.g. 2025)",
-          },
-          agenda_no: {
-            type: "number",
-            description: "Agenda number within the year",
-          },
-        },
-        required: ["year", "agenda_no"],
-      },
-    },
-
-    // ── Transcripts ───────────────────────────────────────────────────────────
-    {
-      name: "list_floor_transcripts",
-      description:
-        "List NYS Senate floor session transcripts for a given year.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          year: {
-            type: "number",
-            description: "Year of the transcripts (e.g. 2025). Defaults to current year.",
-          },
-          limit: { type: "number", description: "Max results (default 50)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-      },
-    },
-    {
-      name: "get_floor_transcript",
-      description:
-        "Get a specific NYS Senate floor session transcript by its datetime. " +
-        "Use list_floor_transcripts to find datetime values.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          date_time: {
-            type: "string",
-            description: "Session datetime, ISO-8601 format: 'YYYY-MM-DDTHH:MM:SS'",
-          },
-        },
-        required: ["date_time"],
-      },
-    },
-    {
-      name: "list_hearing_transcripts",
-      description:
-        "List NYS Senate public hearing transcripts for a given year.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          year: {
-            type: "number",
-            description: "Year of the transcripts (e.g. 2025). Defaults to current year.",
-          },
-          limit: { type: "number", description: "Max results (default 50)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-      },
-    },
-    {
-      name: "get_hearing_transcript",
-      description:
-        "Get a specific NYS Senate public hearing transcript by its filename. " +
-        "Use list_hearing_transcripts to find filenames.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          filename: {
-            type: "string",
-            description: "Hearing transcript filename (from list_hearing_transcripts)",
-          },
-        },
-        required: ["filename"],
-      },
-    },
-
-    // ── Updates ───────────────────────────────────────────────────────────────
-    {
-      name: "get_updates",
-      description:
-        "Get aggregate updates across all NYS Open Legislation content types for a date range. " +
-        "Useful for polling what changed — new bills, amendments, votes, agendas, etc. " +
-        "Optionally filter by content type: bills, agendas, calendars, laws.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          from: {
-            type: "string",
-            description: "Start datetime, ISO-8601: 'YYYY-MM-DDTHH:MM:SS'",
-          },
-          to: {
-            type: "string",
-            description: "End datetime, ISO-8601: 'YYYY-MM-DDTHH:MM:SS'",
-          },
-          type: {
-            type: "string",
-            description: "Filter by content type: bills, agendas, calendars, laws (optional)",
-          },
-          limit: { type: "number", description: "Max results (default 50)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-        required: ["from", "to"],
-      },
-    },
-
-    // ── Search ────────────────────────────────────────────────────────────────
-    {
-      name: "search",
-      description:
-        "Full-text search within one NYS Open Legislation content type using ElasticSearch syntax. " +
-        "The upstream API has no unified search endpoint — each content type is searched separately, " +
-        "so this tool searches a single type per call (defaults to bills). " +
-        "Supported types: bills, laws, agendas, calendars, transcripts, hearings. " +
-        "Supports boolean operators (AND, OR, NOT), phrase quotes, wildcards, and field targeting. " +
-        "To search resolutions, use type 'bills' (they share the bills index).",
-      inputSchema: {
-        type: "object",
-        properties: {
-          term: {
-            type: "string",
-            description: "Search query (e.g. 'minimum wage', 'climate AND emissions', 'title:\"housing\"')",
-          },
-          type: {
-            type: "string",
-            description:
-              "Content type to search: bills (default), laws, agendas, calendars, transcripts, hearings. " +
-              "One type per call.",
-            enum: ["bills", "laws", "agendas", "calendars", "transcripts", "hearings"],
-          },
-          session_year: {
-            type: "number",
-            description: "Filter bills to a specific session year (optional)",
-          },
-          limit: { type: "number", description: "Max results (default 25, max 100)" },
-          offset: { type: "number", description: "Pagination offset (default 0)" },
-        },
-        required: ["term"],
-      },
-    },
-  ],
-}));
-
-// ─── Tool handlers ─────────────────────────────────────────────────────────────
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  try {
-    switch (name) {
-      // ── Bills ───────────────────────────────────────────────────────────────
-      case "search_bills": {
-        const { term, session_year, limit, offset } = z
-          .object({
-            term: z.string(),
-            session_year: z.number().optional(),
-            limit: z.number().max(100).optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args);
-        const local = await localSearchBills(term, session_year, limit ?? 25, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const results = await searchBills(apiKey, term, session_year, limit ?? 25, offset ?? 0);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      case "get_bill": {
-        const { print_no, session_year } = z
-          .object({ print_no: z.string(), session_year: z.number().optional() })
-          .parse(args);
-        const year = session_year ?? currentSessionYear();
-        const local = await localGetBill(year, print_no);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const result = await getBill(apiKey, year, print_no);
-        return { content: [{ type: "text", text: withDisclaimer(result) }] };
-      }
-
-      case "list_bills": {
-        const { session_year, limit, offset } = z
-          .object({
-            session_year: z.number().optional(),
-            limit: z.number().max(500).optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args ?? {});
-        const year = session_year ?? currentSessionYear();
-        const local = await localListBills(year, limit ?? 25, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const results = await listBills(apiKey, year, limit ?? 25, offset ?? 0);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      case "get_bill_votes": {
-        const { print_no, session_year } = z
-          .object({ print_no: z.string(), session_year: z.number().optional() })
-          .parse(args);
-        // Votes always fetched live — they change frequently
-        const results = await getBillVotes(apiKey, session_year ?? currentSessionYear(), print_no);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      case "get_bill_updates": {
-        const { from, to, limit, offset } = z
-          .object({
-            from: z.string(),
-            to: z.string(),
-            limit: z.number().max(500).optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args);
-        // Updates always fetched live by design
-        const results = await getBillUpdates(apiKey, from, to, limit ?? 50, offset ?? 0);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      // ── Laws ────────────────────────────────────────────────────────────────
-      case "list_laws": {
-        const local = await localListLaws();
-        if (local) return { content: [{ type: "text", text: withDisclaimer({ items: local, size: local.length }) }] };
-        const results = await listLaws(apiKey);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      case "get_law_tree": {
-        const { law_id } = z.object({ law_id: z.string() }).parse(args);
-        const local = await localGetLawTree(law_id);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const result = await getLawTree(apiKey, law_id.toUpperCase());
-        return { content: [{ type: "text", text: withDisclaimer(result) }] };
-      }
-
-      case "get_law_section": {
-        const { law_id, location_id } = z
-          .object({ law_id: z.string(), location_id: z.string() })
-          .parse(args);
-        const local = await localGetLawSection(law_id, location_id);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const result = await getLawSection(apiKey, law_id.toUpperCase(), location_id);
-        return { content: [{ type: "text", text: withDisclaimer(result) }] };
-      }
-
-      // ── Members ─────────────────────────────────────────────────────────────
-      case "list_members": {
-        const { chamber, session_year, limit, offset } = z
-          .object({
-            chamber: z.enum(["senate", "assembly"]),
-            session_year: z.number().optional(),
-            limit: z.number().optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args);
-        const year = session_year ?? currentSessionYear();
-        const local = await localListMembers(year, chamber, limit ?? 100, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const results = await listMembers(apiKey, year, chamber, limit ?? 100, offset ?? 0);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      case "get_member": {
-        const { member_id, chamber, session_year } = z
-          .object({
-            member_id: z.number(),
-            chamber: z.enum(["senate", "assembly"]),
-            session_year: z.number().optional(),
-          })
-          .parse(args);
-        const year = session_year ?? currentSessionYear();
-        const local = await localGetMember(year, chamber, member_id);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const result = await getMember(apiKey, year, chamber, member_id);
-        return { content: [{ type: "text", text: withDisclaimer(result) }] };
-      }
-
-      case "search_members": {
-        const { term, chamber, session_year, limit, offset } = z
-          .object({
-            term: z.string(),
-            chamber: z.enum(["senate", "assembly"]).optional(),
-            session_year: z.number().optional(),
-            limit: z.number().optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args);
-        // Member search always hits API (no local FTS for members)
-        const results = await searchMembers(apiKey, term, session_year, chamber, limit ?? 25, offset ?? 0);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      // ── Committees ──────────────────────────────────────────────────────────
-      case "list_committees": {
-        const { chamber, session_year, limit, offset } = z
-          .object({
-            chamber: z.enum(["senate", "assembly"]),
-            session_year: z.number().optional(),
-            limit: z.number().optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args);
-        const year = session_year ?? currentSessionYear();
-        const local = await localListCommittees(year, chamber, limit ?? 100, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const results = await listCommittees(apiKey, year, chamber, limit ?? 100, offset ?? 0);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      case "get_committee": {
-        const { committee_name, chamber, session_year } = z
-          .object({
-            committee_name: z.string(),
-            chamber: z.enum(["senate", "assembly"]),
-            session_year: z.number().optional(),
-          })
-          .parse(args);
-        const year = session_year ?? currentSessionYear();
-        const local = await localGetCommittee(year, chamber, committee_name);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const result = await getCommittee(apiKey, year, chamber, committee_name);
-        return { content: [{ type: "text", text: withDisclaimer(result) }] };
-      }
-
-      case "get_committee_meetings": {
-        const { committee_name, chamber, session_year, limit, offset } = z
-          .object({
-            committee_name: z.string(),
-            chamber: z.enum(["senate", "assembly"]),
-            session_year: z.number().optional(),
-            limit: z.number().optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args);
-        // Meeting history is always fetched live — schedule changes frequently
-        const results = await getCommitteeMeetings(
-          apiKey,
-          session_year ?? currentSessionYear(),
-          chamber,
-          committee_name,
-          limit ?? 25,
-          offset ?? 0
-        );
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      // ── Calendars ───────────────────────────────────────────────────────────
-      case "list_calendars": {
-        const { year, limit, offset } = z
-          .object({
-            year: z.number().optional(),
-            limit: z.number().optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args ?? {});
-        const calYear = year ?? new Date().getFullYear();
-        const local = await localListCalendars(calYear, limit ?? 50, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const results = await listCalendars(apiKey, calYear, limit ?? 50, offset ?? 0);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      case "get_calendar": {
-        const { year, calendar_no } = z
-          .object({ year: z.number(), calendar_no: z.number() })
-          .parse(args);
-        const local = await localGetCalendar(year, calendar_no);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const result = await getCalendar(apiKey, year, calendar_no);
-        return { content: [{ type: "text", text: withDisclaimer(result) }] };
-      }
-
-      // ── Agendas ─────────────────────────────────────────────────────────────
-      case "list_agendas": {
-        const { year, limit, offset } = z
-          .object({
-            year: z.number().optional(),
-            limit: z.number().optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args ?? {});
-        const agYear = year ?? new Date().getFullYear();
-        const local = await localListAgendas(agYear, limit ?? 50, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const results = await listAgendas(apiKey, agYear, limit ?? 50, offset ?? 0);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      case "get_agenda": {
-        const { year, agenda_no } = z
-          .object({ year: z.number(), agenda_no: z.number() })
-          .parse(args);
-        const local = await localGetAgenda(year, agenda_no);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const result = await getAgenda(apiKey, year, agenda_no);
-        return { content: [{ type: "text", text: withDisclaimer(result) }] };
-      }
-
-      // ── Transcripts ─────────────────────────────────────────────────────────
-      case "list_floor_transcripts": {
-        const { year, limit, offset } = z
-          .object({
-            year: z.number().optional(),
-            limit: z.number().optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args ?? {});
-        const ftYear = year ?? new Date().getFullYear();
-        const local = await localListFloorTranscripts(ftYear, limit ?? 50, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const results = await listFloorTranscripts(apiKey, ftYear, limit ?? 50, offset ?? 0);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      case "get_floor_transcript": {
-        const { date_time } = z.object({ date_time: z.string() }).parse(args);
-        // Returns null from local if text wasn't fetched (--include-transcript-text not used)
-        const local = await localGetFloorTranscript(date_time);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const result = await getFloorTranscript(apiKey, date_time);
-        return { content: [{ type: "text", text: withDisclaimer(result) }] };
-      }
-
-      case "list_hearing_transcripts": {
-        const { year, limit, offset } = z
-          .object({
-            year: z.number().optional(),
-            limit: z.number().optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args ?? {});
-        const htYear = year ?? new Date().getFullYear();
-        const local = await localListHearingTranscripts(htYear, limit ?? 50, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const results = await listHearingTranscripts(apiKey, htYear, limit ?? 50, offset ?? 0);
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      case "get_hearing_transcript": {
-        const { filename } = z.object({ filename: z.string() }).parse(args);
-        // Returns null from local if text wasn't fetched (--include-transcript-text not used)
-        const local = await localGetHearingTranscript(filename);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const result = await getHearingTranscript(apiKey, filename);
-        return { content: [{ type: "text", text: withDisclaimer(result) }] };
-      }
-
-      // ── Updates ─────────────────────────────────────────────────────────────
-      case "get_updates": {
-        const { from, to, type, limit, offset } = z
-          .object({
-            from: z.string(),
-            to: z.string(),
-            type: z.string().optional(),
-            limit: z.number().optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args);
-        const results = await getUpdates(
-          apiKey,
-          from,
-          to,
-          type,
-          limit ?? 50,
-          offset ?? 0
-        );
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      // ── Search ──────────────────────────────────────────────────────────────
-      case "search": {
-        const { term, type, session_year, limit, offset } = z
-          .object({
-            term: z.string(),
-            type: z.string().optional(),
-            session_year: z.number().optional(),
-            limit: z.number().max(100).optional(),
-            offset: z.number().optional(),
-          })
-          .parse(args);
-        const results = await search(
-          apiKey,
-          term,
-          type,
-          session_year,
-          limit ?? 25,
-          offset ?? 0
-        );
-        return { content: [{ type: "text", text: withDisclaimer(results) }] };
-      }
-
-      default:
+for (const tool of TOOLS) {
+  server.registerTool(
+    tool.name,
+    { description: tool.description, inputSchema: tool.schema },
+    async (args: Record<string, any>) => {
+      try {
+        const local = tool.local ? await tool.local(args ?? {}) : null;
+        const result = local ?? (await tool.live(args ?? {}));
+        return { content: [{ type: "text" as const, text: withDisclaimer(result) }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         return {
-          content: [{ type: "text", text: `Unknown tool: ${name}` }],
+          content: [{ type: "text" as const, text: `Error: ${message}` }],
           isError: true,
         };
+      }
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
-  }
-});
+  );
+}
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 

@@ -100,11 +100,11 @@ test("session year is sent only for bills search", async () => {
   );
 });
 
-test("resolutions gives an actionable redirect, not a fetch", async () => {
+test("resolutions is rejected as unsupported (tool schema routes it to bills), no fetch", async () => {
   const calls = installFetchMock();
   await assert.rejects(
     () => search(API_KEY, "tourism", "resolutions"),
-    /type: "bills"/
+    /Unsupported search type "resolutions"/
   );
   assert.strictEqual(calls.length, 0, "must not fetch for an unsupported type");
 });

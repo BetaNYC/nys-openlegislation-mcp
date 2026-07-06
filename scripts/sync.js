@@ -15,14 +15,25 @@
  *   --dry-run                     Print what would be synced without writing to DB
  */
 
-import Database from "better-sqlite3";
 import { existsSync } from "fs";
+import { START_OFFSET, nextOffset, isLastPage, basePrintNo } from "./lib/api-helpers.js";
+
+let Database;
+try {
+  ({ default: Database } = await import("better-sqlite3"));
+} catch {
+  console.error(
+    "Error: better-sqlite3 is not installed or failed to build on this machine.\n" +
+      "The corpus scripts require it: npm install better-sqlite3"
+  );
+  process.exit(1);
+}
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, "..", "data");
-const DB_PATH = join(DATA_DIR, "corpus.db");
+const DB_PATH = process.env.NYS_CORPUS_DB ?? join(DATA_DIR, "corpus.db");
 const BASE_URL = "https://legislation.nysenate.gov/api/3";
 
 // ─── CLI args ─────────────────────────────────────────────────────────────────
@@ -81,18 +92,26 @@ async function apiFetch(path, params = {}) {
   if (!res.ok) throw new Error(`API ${res.status} ${res.statusText} — ${path}`);
   const data = await res.json();
   if (!data.success) throw new Error(`API failure: ${data.message} — ${path}`);
-  return data.result;
+  // Top-level `total` is the full match count; result.size is just the page size.
+  return { result: data.result, total: data.total ?? null };
 }
 
 // ─── Upsert statements ────────────────────────────────────────────────────────
 
+// Ensure schema additions exist on older corpora (cheap, idempotent).
+const billCols = db.prepare("PRAGMA table_info(bills)").all().map((c) => c.name);
+if (!billCols.includes("active_version")) {
+  db.exec("ALTER TABLE bills ADD COLUMN active_version TEXT");
+}
+
 const upsertBill = db.prepare(`
-  INSERT INTO bills (session_year, print_no, base_print_no, title, summary, sponsor_name, status_desc, committee, published_date, last_updated, raw_json)
-  VALUES (@session_year, @print_no, @base_print_no, @title, @summary, @sponsor_name, @status_desc, @committee, @published_date, @last_updated, @raw_json)
+  INSERT INTO bills (session_year, print_no, base_print_no, title, summary, sponsor_name, status_desc, committee, published_date, last_updated, active_version, raw_json)
+  VALUES (@session_year, @print_no, @base_print_no, @title, @summary, @sponsor_name, @status_desc, @committee, @published_date, @last_updated, @active_version, @raw_json)
   ON CONFLICT(session_year, print_no) DO UPDATE SET
     title=excluded.title, summary=excluded.summary, sponsor_name=excluded.sponsor_name,
     status_desc=excluded.status_desc, committee=excluded.committee,
-    last_updated=excluded.last_updated, raw_json=excluded.raw_json
+    last_updated=excluded.last_updated, active_version=excluded.active_version,
+    raw_json=excluded.raw_json
 `);
 
 const upsertMember = db.prepare(`
@@ -100,12 +119,6 @@ const upsertMember = db.prepare(`
   VALUES (@member_id, @session_year, @chamber, @short_name, @district, @raw_json)
   ON CONFLICT(member_id, session_year, chamber) DO UPDATE SET
     short_name=excluded.short_name, raw_json=excluded.raw_json
-`);
-
-const upsertCommittee = db.prepare(`
-  INSERT INTO committees (session_year, chamber, name, raw_json)
-  VALUES (@session_year, @chamber, @name, @raw_json)
-  ON CONFLICT(session_year, chamber, name) DO UPDATE SET raw_json=excluded.raw_json
 `);
 
 const upsertAgenda = db.prepare(`
@@ -129,17 +142,20 @@ const setSyncState = db.prepare(`
 
 async function syncUpdates() {
   console.log(`\nFetching updates from ${fromDateTime} to ${toDateTime}…`);
-  let offset = 0;
+  let offset = START_OFFSET; // API offsets are 1-based (offsetStart)
   const limit = 1000;
   let totalProcessed = 0;
+  let totalFailed = 0;
+  let fetchedCount = 0;
 
   while (true) {
-    const result = await apiFetch(
+    const { result, total } = await apiFetch(
       `/updates/${encodeURIComponent(fromDateTime)}/${encodeURIComponent(toDateTime)}`,
       { limit, offset, order: "asc" }
     );
     const items = result.items ?? [];
     if (items.length === 0) break;
+    fetchedCount += items.length;
 
     console.log(`  Processing ${items.length} updates (offset ${offset})…`);
 
@@ -149,11 +165,15 @@ async function syncUpdates() {
 
       try {
         if (type === "bill" && id.basePrintNo && id.session) {
-          const bill = await apiFetch(`/bills/${id.session}/${id.basePrintNo}`);
+          const { result: bill } = await apiFetch(`/bills/${id.session}/${id.basePrintNo}`);
           if (!DRY_RUN) {
+            // Key on the BASE print number. Amended bills report printNo with
+            // the active amendment letter (e.g. S1234A) while the corpus row
+            // is keyed S1234 — using printNo here froze base rows forever.
             upsertBill.run({
               session_year: bill.session,
-              print_no: bill.printNo,
+              print_no: basePrintNo(bill.basePrintNo ?? bill.printNo),
+              active_version: bill.activeVersion ?? null,
               base_print_no: bill.basePrintNo,
               title: bill.title ?? null,
               summary: bill.summary ?? null,
@@ -169,7 +189,7 @@ async function syncUpdates() {
           await sleep(DELAY_MS);
 
         } else if (type === "agenda" && id.number && id.year) {
-          const agenda = await apiFetch(`/agendas/${id.year}/${id.number}`);
+          const { result: agenda } = await apiFetch(`/agendas/${id.year}/${id.number}`);
           if (!DRY_RUN) {
             upsertAgenda.run({
               year: id.year,
@@ -182,7 +202,7 @@ async function syncUpdates() {
           await sleep(DELAY_MS);
 
         } else if (type === "calendar" && id.calNo && id.year) {
-          const cal = await apiFetch(`/calendars/${id.year}/${id.calNo}`);
+          const { result: cal } = await apiFetch(`/calendars/${id.year}/${id.calNo}`);
           if (!DRY_RUN) {
             upsertCalendar.run({
               year: id.year,
@@ -194,35 +214,25 @@ async function syncUpdates() {
           totalProcessed++;
           await sleep(DELAY_MS);
 
-        } else if (type === "committee" && id.name && id.chamber && id.session) {
-          const committee = await apiFetch(
-            `/committees/${id.session}/${id.chamber.toLowerCase()}/${encodeURIComponent(id.name)}`
-          );
-          if (!DRY_RUN) {
-            upsertCommittee.run({
-              session_year: id.session,
-              chamber: id.chamber,
-              name: committee.name,
-              raw_json: JSON.stringify(committee),
-            });
-          }
-          totalProcessed++;
-          await sleep(DELAY_MS);
         }
+        // The aggregate updates feed only carries AGENDA / BILL / CALENDAR / LAW
+        // content types — committees never appear here, so there is no committee
+        // branch. Committee data goes stale between full fetch-data.js runs; see
+        // the "Known limitations" note in the README.
         // Law and transcript updates: too expensive to sync section-by-section.
         // Users should re-run fetch-data.js for those periodically.
       } catch (e) {
+        totalFailed++;
         console.warn(`  ⚠ Skipped ${type} ${JSON.stringify(id)}: ${e.message}`);
       }
     }
 
-    offset += items.length;
-    const size = result.size ?? items.length;
-    if (items.length < limit || offset >= size) break;
+    if (isLastPage(items.length, limit, fetchedCount, total)) break;
+    offset = nextOffset(offset, items.length);
     await sleep(DELAY_MS);
   }
 
-  return totalProcessed;
+  return { totalProcessed, totalFailed };
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -234,14 +244,22 @@ console.log(`  To:   ${toDateTime}`);
 console.log(`  DB:   ${DB_PATH}`);
 
 const startTime = Date.now();
-const count = await syncUpdates();
+const { totalProcessed: count, totalFailed: failed } = await syncUpdates();
 
 if (!DRY_RUN) {
-  setSyncState.run("last_synced_at", toDateTime);
+  if (failed === 0) {
+    setSyncState.run("last_synced_at", toDateTime);
+  } else {
+    // Leave the watermark where it was so the next run retries the window
+    // that contained the failed items.
+    console.warn(
+      `\n⚠ ${failed} item(s) failed — last_synced_at NOT advanced; next run will retry from ${fromDateTime}`
+    );
+  }
 }
 
 db.close();
 
 const elapsed = Math.round((Date.now() - startTime) / 1000);
-console.log(`\n✅ Synced ${count} records in ${elapsed}s`);
+console.log(`\n✅ Synced ${count} records in ${elapsed}s${failed ? ` (${failed} failed)` : ""}`);
 if (DRY_RUN) console.log("   (dry run — DB not updated)");

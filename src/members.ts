@@ -51,10 +51,12 @@ export async function listMembers(
 export async function getMember(
   apiKey: string,
   sessionYear: number,
-  chamber: "senate" | "assembly",
   memberId: number
 ): Promise<Member> {
-  const url = buildUrl(`/members/${sessionYear}/${chamber}/${memberId}`, apiKey);
+  // Documented endpoint: /api/3/members/{sessionYear}/{memberId}.
+  // (The chamber-qualified form /members/{session}/{chamber}/{memberId} is a
+  // list endpoint, not a get-by-id endpoint — verified live 2026-07-06.)
+  const url = buildUrl(`/members/${sessionYear}/${memberId}`, apiKey);
   return apiFetch<Member>(url);
 }
 

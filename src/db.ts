@@ -10,7 +10,8 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = join(__dirname, "..", "data", "corpus.db");
+// NYS_CORPUS_DB overrides the corpus location; default is data/corpus.db in the package.
+const DB_PATH = process.env.NYS_CORPUS_DB ?? join(__dirname, "..", "data", "corpus.db");
 
 // ─── DB handle (lazy singleton) ───────────────────────────────────────────────
 
@@ -155,11 +156,17 @@ export async function localGetLawTree(lawId: string): Promise<Record<string, unk
   const db = await getDb();
   if (!db) return null;
   try {
+    // raw_json in law_trees holds the law *list item* (id/name/type), not the
+    // document tree — returning it here used to serve a stub instead of the
+    // actual table of contents. The real tree lives in tree_json (populated by
+    // fetch-data.js since 2026-07). If it's absent (older corpus or column
+    // missing), return null so the server falls through to the live API.
     const row = (db as any)
-      .prepare("SELECT raw_json FROM law_trees WHERE law_id=? LIMIT 1")
-      .get(lawId.toUpperCase()) as { raw_json: string } | undefined;
-    return row ? JSON.parse(row.raw_json) : null;
+      .prepare("SELECT tree_json FROM law_trees WHERE law_id=? LIMIT 1")
+      .get(lawId.toUpperCase()) as { tree_json: string | null } | undefined;
+    return row?.tree_json ? JSON.parse(row.tree_json) : null;
   } catch {
+    // Older corpora have no tree_json column — fall through to the live API.
     return null;
   }
 }

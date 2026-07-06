@@ -17,14 +17,25 @@
  *                              (default: bills,laws,members,committees,agendas,calendars,transcripts)
  */
 
-import Database from "better-sqlite3";
 import { mkdirSync, existsSync } from "fs";
+import { START_OFFSET, nextOffset, isLastPage, basePrintNo } from "./lib/api-helpers.js";
+
+let Database;
+try {
+  ({ default: Database } = await import("better-sqlite3"));
+} catch {
+  console.error(
+    "Error: better-sqlite3 is not installed or failed to build on this machine.\n" +
+      "The corpus scripts require it: npm install better-sqlite3"
+  );
+  process.exit(1);
+}
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, "..", "data");
-const DB_PATH = join(DATA_DIR, "corpus.db");
+const DB_PATH = process.env.NYS_CORPUS_DB ?? join(DATA_DIR, "corpus.db");
 const BASE_URL = "https://legislation.nysenate.gov/api/3";
 
 // ─── CLI args ─────────────────────────────────────────────────────────────────
@@ -66,6 +77,7 @@ db.exec(`
     committee      TEXT,
     published_date TEXT,
     last_updated   TEXT,
+    active_version TEXT,
     raw_json       TEXT,
     PRIMARY KEY (session_year, print_no)
   );
@@ -81,7 +93,8 @@ db.exec(`
     law_id    TEXT PRIMARY KEY,
     name      TEXT,
     law_type  TEXT,
-    raw_json  TEXT
+    raw_json  TEXT,
+    tree_json TEXT
   );
 
   CREATE TABLE IF NOT EXISTS law_sections (
@@ -155,6 +168,14 @@ db.exec(`
   );
 `);
 
+// Ensure schema additions exist on corpora created before these columns (idempotent).
+function ensureColumn(table, column, ddl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+}
+ensureColumn("bills", "active_version", "TEXT");
+ensureColumn("law_trees", "tree_json", "TEXT");
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -174,16 +195,15 @@ async function apiFetch(path, params = {}) {
 
 async function fetchAllPages(path, params = {}, label = path) {
   const items = [];
-  let offset = 0;
+  let offset = START_OFFSET; // API offsets are 1-based (offsetStart) — advancing by limit from 0 duplicated a row per page
   const limit = 1000;
   while (true) {
     const { result, total } = await apiFetch(path, { ...params, limit, offset });
     const page = Array.isArray(result) ? result : (result.items ?? []);
     items.push(...page);
     process.stdout.write(`\r  ${label}: ${items.length}${total ? `/${total}` : ""} fetched…`);
-    // Break when we've received a short page (last page) or fetched everything.
-    if (page.length < limit || (total !== null && items.length >= total)) break;
-    offset += limit;
+    if (isLastPage(page.length, limit, items.length, total)) break;
+    offset = nextOffset(offset, page.length);
     await sleep(DELAY_MS);
   }
   console.log(`\r  ${label}: ${items.length} fetched ✓`);
@@ -226,18 +246,23 @@ db.exec(`
 // ─── Upsert helpers ───────────────────────────────────────────────────────────
 
 const upsertBill = db.prepare(`
-  INSERT INTO bills (session_year, print_no, base_print_no, title, summary, sponsor_name, status_desc, committee, published_date, last_updated, raw_json)
-  VALUES (@session_year, @print_no, @base_print_no, @title, @summary, @sponsor_name, @status_desc, @committee, @published_date, @last_updated, @raw_json)
+  INSERT INTO bills (session_year, print_no, base_print_no, title, summary, sponsor_name, status_desc, committee, published_date, last_updated, active_version, raw_json)
+  VALUES (@session_year, @print_no, @base_print_no, @title, @summary, @sponsor_name, @status_desc, @committee, @published_date, @last_updated, @active_version, @raw_json)
   ON CONFLICT(session_year, print_no) DO UPDATE SET
     title=excluded.title, summary=excluded.summary, sponsor_name=excluded.sponsor_name,
     status_desc=excluded.status_desc, committee=excluded.committee,
-    last_updated=excluded.last_updated, raw_json=excluded.raw_json
+    last_updated=excluded.last_updated, active_version=excluded.active_version,
+    raw_json=excluded.raw_json
 `);
 
 const upsertLawTree = db.prepare(`
   INSERT INTO law_trees (law_id, name, law_type, raw_json)
   VALUES (@law_id, @name, @law_type, @raw_json)
   ON CONFLICT(law_id) DO UPDATE SET name=excluded.name, raw_json=excluded.raw_json
+`);
+
+const setLawTreeJson = db.prepare(`
+  UPDATE law_trees SET tree_json=@tree_json WHERE law_id=@law_id
 `);
 
 const upsertLawSection = db.prepare(`
@@ -297,8 +322,11 @@ async function fetchBills() {
     for (const b of bills) {
       upsertBill.run({
         session_year: b.session,
-        print_no: b.printNo,
+        // Key rows by the BASE print number so amendment updates (S1234A)
+        // land on the same row later synced by sync.js.
+        print_no: basePrintNo(b.basePrintNo ?? b.printNo),
         base_print_no: b.basePrintNo,
+        active_version: b.activeVersion ?? null,
         title: b.title ?? null,
         summary: b.summary ?? null,
         sponsor_name: b.sponsor?.member?.fullName ?? null,
@@ -335,6 +363,9 @@ async function fetchLaws() {
     // Fetch tree structure (no full text here)
     try {
       const { result: tree } = await apiFetch(`/laws/${law.lawId}`);
+      // Store the actual document tree — raw_json only holds the law LIST
+      // item, which is not a tree; serving it from the corpus returned a stub.
+      setLawTreeJson.run({ law_id: law.lawId, tree_json: JSON.stringify(tree) });
       // Extract sections from the tree and store metadata
       const sections = flattenLawTree(tree.documents, law.lawId);
       const insertSections = db.transaction((secs) => {
@@ -489,12 +520,29 @@ async function fetchCalendars() {
 
 async function fetchTranscripts() {
   console.log("\n🎙️  Fetching transcripts…");
+  // Documented endpoints (verified live 2026-07-06):
+  //   floor list:   /transcripts/{year}     floor get:   /transcripts/{dateTime}
+  //   hearing list: /hearings/{year}        hearing get: /hearings/{filename}
+  // The old /transcripts/floor/{year} and /transcripts/hearing/{year} paths
+  // 400, and a bare catch{} used to swallow those failures silently.
   for (const year of calendarYears()) {
     // Floor transcripts
     try {
-      const items = await fetchAllPages(
-        `/transcripts/floor/${year}`, {}, `floor/${year}`
-      );
+      let items = await fetchAllPages(`/transcripts/${year}`, {}, `floor/${year}`);
+      if (INCLUDE_TRANSCRIPT_TEXT) {
+        const full = [];
+        for (const t of items) {
+          try {
+            const { result } = await apiFetch(`/transcripts/${encodeURIComponent(t.dateTime)}`);
+            full.push(result);
+          } catch (e) {
+            console.warn(`\n  ⚠ floor/${year} ${t.dateTime}: ${e.message}`);
+            full.push(t);
+          }
+          await sleep(DELAY_MS);
+        }
+        items = full;
+      }
       const insertMany = db.transaction((transcripts) => {
         for (const t of transcripts) {
           const hasText = INCLUDE_TRANSCRIPT_TEXT && !!t.text;
@@ -509,13 +557,27 @@ async function fetchTranscripts() {
         }
       });
       insertMany(items);
-    } catch { /* year may have no floor transcripts */ }
+    } catch (e) {
+      console.warn(`\n  ⚠ floor transcripts ${year}: ${e.message}`);
+    }
 
     // Hearing transcripts
     try {
-      const items = await fetchAllPages(
-        `/transcripts/hearing/${year}`, {}, `hearing/${year}`
-      );
+      let items = await fetchAllPages(`/hearings/${year}`, {}, `hearing/${year}`);
+      if (INCLUDE_TRANSCRIPT_TEXT) {
+        const full = [];
+        for (const t of items) {
+          try {
+            const { result } = await apiFetch(`/hearings/${encodeURIComponent(t.filename)}`);
+            full.push(result);
+          } catch (e) {
+            console.warn(`\n  ⚠ hearing/${year} ${t.filename}: ${e.message}`);
+            full.push(t);
+          }
+          await sleep(DELAY_MS);
+        }
+        items = full;
+      }
       const insertMany = db.transaction((transcripts) => {
         for (const t of transcripts) {
           const hasText = INCLUDE_TRANSCRIPT_TEXT && !!t.text;
@@ -530,7 +592,9 @@ async function fetchTranscripts() {
         }
       });
       insertMany(items);
-    } catch { /* year may have no hearing transcripts */ }
+    } catch (e) {
+      console.warn(`\n  ⚠ hearing transcripts ${year}: ${e.message}`);
+    }
 
     await sleep(DELAY_MS);
   }

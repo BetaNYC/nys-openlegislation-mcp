@@ -30,6 +30,7 @@ import {
   getHearingTranscript,
 } from "./transcripts.js";
 import { getUpdates } from "./updates.js";
+import { isEmptyLocalResult, annotateLocalResult } from "./localResult.js";
 import { search } from "./search.js";
 import {
   localGetBill,
@@ -61,6 +62,21 @@ if (!apiKey) {
       "Request a free API key at: https://legislation.nysenate.gov/register"
   );
   process.exit(1);
+}
+
+// ─── Local corpus serving ─────────────────────────────────────────────────────
+
+/**
+ * Wrap a local corpus result into a tool response, or return null to fall
+ * through to the live API. Empty local results (0 items) never shadow live
+ * data; served results carry a `source: "local corpus (synced <date>)"` note.
+ */
+async function localResponse(
+  local: unknown
+): Promise<{ content: Array<{ type: "text"; text: string }> } | null> {
+  if (local == null || isEmptyLocalResult(local)) return null;
+  const annotated = await annotateLocalResult(local as object);
+  return { content: [{ type: "text", text: withDisclaimer(annotated) }] };
 }
 
 // ─── Server ───────────────────────────────────────────────────────────────────
@@ -525,7 +541,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description:
         "Get aggregate updates across all NYS Open Legislation content types for a date range. " +
         "Useful for polling what changed — new bills, amendments, votes, agendas, etc. " +
-        "Optionally filter by content type: bills, agendas, calendars, laws.",
+        "Optionally restrict to one content type via content_type: bills, agendas, calendars, laws.",
       inputSchema: {
         type: "object",
         properties: {
@@ -539,7 +555,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           type: {
             type: "string",
-            description: "Filter by content type: bills, agendas, calendars, laws (optional)",
+            enum: ["processed", "published"],
+            description:
+              "Which timestamp the date range filters on: 'processed' (when Open Legislation " +
+              "processed the change) or 'published' (when the source data was published). " +
+              "Not a content-type filter — use content_type for that. (optional)",
+          },
+          content_type: {
+            type: "string",
+            enum: ["bills", "agendas", "calendars", "laws"],
+            description: "Restrict results to one content type (optional)",
           },
           limit: { type: "number", description: "Max results (default 50)" },
           offset: { type: "number", description: "Pagination offset (default 0)" },
@@ -603,7 +628,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           })
           .parse(args);
         const local = await localSearchBills(term, session_year, limit ?? 25, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const results = await searchBills(apiKey, term, session_year, limit ?? 25, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
@@ -614,7 +640,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .parse(args);
         const year = session_year ?? currentSessionYear();
         const local = await localGetBill(year, print_no);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const result = await getBill(apiKey, year, print_no);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -629,7 +656,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .parse(args ?? {});
         const year = session_year ?? currentSessionYear();
         const local = await localListBills(year, limit ?? 25, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const results = await listBills(apiKey, year, limit ?? 25, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
@@ -660,7 +688,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // ── Laws ────────────────────────────────────────────────────────────────
       case "list_laws": {
         const local = await localListLaws();
-        if (local) return { content: [{ type: "text", text: withDisclaimer({ items: local, size: local.length }) }] };
+        const localResp = await localResponse(local ? { items: local, size: local.length } : null);
+        if (localResp) return localResp;
         const results = await listLaws(apiKey);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
@@ -668,7 +697,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_law_tree": {
         const { law_id } = z.object({ law_id: z.string() }).parse(args);
         const local = await localGetLawTree(law_id);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const result = await getLawTree(apiKey, law_id.toUpperCase());
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -678,7 +708,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .object({ law_id: z.string(), location_id: z.string() })
           .parse(args);
         const local = await localGetLawSection(law_id, location_id);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const result = await getLawSection(apiKey, law_id.toUpperCase(), location_id);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -695,7 +726,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .parse(args);
         const year = session_year ?? currentSessionYear();
         const local = await localListMembers(year, chamber, limit ?? 100, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const results = await listMembers(apiKey, year, chamber, limit ?? 100, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
@@ -710,8 +742,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .parse(args);
         const year = session_year ?? currentSessionYear();
         const local = await localGetMember(year, chamber, member_id);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
-        const result = await getMember(apiKey, year, chamber, member_id);
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
+        const result = await getMember(apiKey, year, member_id);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
 
@@ -742,7 +775,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .parse(args);
         const year = session_year ?? currentSessionYear();
         const local = await localListCommittees(year, chamber, limit ?? 100, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const results = await listCommittees(apiKey, year, chamber, limit ?? 100, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
@@ -757,7 +791,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .parse(args);
         const year = session_year ?? currentSessionYear();
         const local = await localGetCommittee(year, chamber, committee_name);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const result = await getCommittee(apiKey, year, chamber, committee_name);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -795,7 +830,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .parse(args ?? {});
         const calYear = year ?? new Date().getFullYear();
         const local = await localListCalendars(calYear, limit ?? 50, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const results = await listCalendars(apiKey, calYear, limit ?? 50, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
@@ -805,7 +841,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .object({ year: z.number(), calendar_no: z.number() })
           .parse(args);
         const local = await localGetCalendar(year, calendar_no);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const result = await getCalendar(apiKey, year, calendar_no);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -821,7 +858,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .parse(args ?? {});
         const agYear = year ?? new Date().getFullYear();
         const local = await localListAgendas(agYear, limit ?? 50, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const results = await listAgendas(apiKey, agYear, limit ?? 50, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
@@ -831,7 +869,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .object({ year: z.number(), agenda_no: z.number() })
           .parse(args);
         const local = await localGetAgenda(year, agenda_no);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const result = await getAgenda(apiKey, year, agenda_no);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -847,7 +886,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .parse(args ?? {});
         const ftYear = year ?? new Date().getFullYear();
         const local = await localListFloorTranscripts(ftYear, limit ?? 50, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const results = await listFloorTranscripts(apiKey, ftYear, limit ?? 50, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
@@ -856,7 +896,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { date_time } = z.object({ date_time: z.string() }).parse(args);
         // Returns null from local if text wasn't fetched (--include-transcript-text not used)
         const local = await localGetFloorTranscript(date_time);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const result = await getFloorTranscript(apiKey, date_time);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
@@ -871,7 +912,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .parse(args ?? {});
         const htYear = year ?? new Date().getFullYear();
         const local = await localListHearingTranscripts(htYear, limit ?? 50, offset ?? 0);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const results = await listHearingTranscripts(apiKey, htYear, limit ?? 50, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
@@ -880,18 +922,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { filename } = z.object({ filename: z.string() }).parse(args);
         // Returns null from local if text wasn't fetched (--include-transcript-text not used)
         const local = await localGetHearingTranscript(filename);
-        if (local) return { content: [{ type: "text", text: withDisclaimer(local) }] };
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
         const result = await getHearingTranscript(apiKey, filename);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
 
       // ── Updates ─────────────────────────────────────────────────────────────
       case "get_updates": {
-        const { from, to, type, limit, offset } = z
+        const { from, to, type, content_type, limit, offset } = z
           .object({
             from: z.string(),
             to: z.string(),
-            type: z.string().optional(),
+            type: z.enum(["processed", "published"]).optional(),
+            content_type: z.enum(["bills", "agendas", "calendars", "laws"]).optional(),
             limit: z.number().optional(),
             offset: z.number().optional(),
           })
@@ -901,6 +945,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           from,
           to,
           type,
+          content_type,
           limit ?? 50,
           offset ?? 0
         );

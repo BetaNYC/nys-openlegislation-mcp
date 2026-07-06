@@ -36,6 +36,8 @@ Bill URLs returned by this server point to the public [nysenate.gov](https://www
 
 ## Installation
 
+Requires **Node.js 20 or newer**.
+
 ### Use with Claude Desktop (recommended)
 
 **No global install needed.** Add to your Claude Desktop config and `npx` handles the rest.
@@ -87,11 +89,15 @@ By default the server queries the live NYS Open Legislation API on every request
 
 ### Requirements
 
+The fetch and sync scripts (`scripts/`) are **not included in the npm package** — building a local corpus requires a git clone:
+
 ```bash
-npm install better-sqlite3
+git clone https://github.com/BetaNYC/nys-openlegislation-mcp.git
+cd nys-openlegislation-mcp
+npm install
 ```
 
-`better-sqlite3` is an optional dependency. The server works without it — it just means every request goes to the live API.
+`better-sqlite3` is an optional dependency. The server works without it — it just means every request goes to the live API. If its native build was skipped, install it explicitly with `npm install better-sqlite3`.
 
 ### 1. Fetch the initial corpus
 
@@ -110,7 +116,7 @@ NYS_LEGISLATION_API_KEY=your-key node scripts/fetch-data.js
 | `--delay-ms=N` | `150` | Delay between API calls in ms |
 | `--dry-run` | off | Print what would be fetched without writing |
 
-The corpus lands in `data/corpus.db`. A full fetch without law or transcript text takes **2–6 hours** depending on your start year and network speed. The `--types` flag lets you fetch only what you need.
+The corpus lands in `data/corpus.db` (override the location with the `NYS_CORPUS_DB` environment variable — both the server and the scripts honor it). A full fetch without law or transcript text takes **2–6 hours** depending on your start year and network speed. The `--types` flag lets you fetch only what you need.
 
 ### 2. Run incremental sync (nightly)
 
@@ -133,9 +139,14 @@ NYS_LEGISLATION_API_KEY=your-key node scripts/sync.js
 
 ### How local-first works
 
-When `data/corpus.db` exists and `better-sqlite3` is available, every tool handler queries the local DB first. If the record is found locally, it returns immediately without an API call. If not found (new bill, cache miss, `has_text=0` for a transcript), it falls through to the live API transparently.
+When `data/corpus.db` exists and `better-sqlite3` is available, every tool handler queries the local DB first. If the record is found locally, it returns immediately without an API call, annotated with `"source": "local corpus (synced <date>)"` so staleness is visible. If the record is not found — or the local result is **empty** (0 items) — it falls through to the live API transparently; an empty local slice never shadows live data.
 
 Law section text and transcript full text fall back to the API unless `--include-law-text` / `--include-transcript-text` were used during the initial fetch.
+
+### Known limitations
+
+- **Committees go stale between full fetches.** The incremental sync consumes the aggregate updates feed, which only carries `AGENDA` / `BILL` / `CALENDAR` / `LAW` content types — committee changes never appear in it. Re-run `fetch-data.js --types=committees` periodically (it is a quick fetch) to refresh committee data.
+- **Law and transcript text** are not incrementally synced; re-run `fetch-data.js` for those periodically.
 
 ---
 
@@ -197,7 +208,7 @@ Law section text and transcript full text fall back to the API unless `--include
 
 | Tool | Description |
 |---|---|
-| `get_updates` | Aggregate change feed across all content types for a date range |
+| `get_updates` | Aggregate change feed for a date range. `type` selects the timestamp the range filters on (`processed` or `published`); `content_type` restricts to `bills`, `agendas`, `calendars`, or `laws` |
 | `search` | Full-text search within one content type — `bills` (default), `laws`, `agendas`, `calendars`, `transcripts`, `hearings`. One type per call; the upstream API has no unified search endpoint. Search resolutions via `type: "bills"`. |
 
 ---

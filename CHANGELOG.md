@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-06
+
+### Fixed
+
+- Transcript endpoints corrected to `/transcripts/{year|dateTime}` and
+  `/hearings/{year|filename}` (the old `/transcripts/floor/...` and
+  `/transcripts/hearing/...` routes do not exist); `fetch-data.js` no longer
+  silently swallows transcript failures, and `--include-transcript-text`
+  actually fetches text per item.
+- `get_member` uses the documented `/members/{sessionYear}/{memberId}` route;
+  `chamber` is retained for local-corpus lookups only.
+- Empty local-corpus results (0 items) now fall through to the live API instead
+  of shadowing live data; `get_law_tree` serves a real tree from a new
+  `tree_json` column instead of a stub.
+- `sync.js` pagination uses 1-based offsets and the envelope `total` (no more
+  page-size-as-total or one-row overlap per page), and leaves the
+  `last_synced_at` watermark untouched when any item fails.
+- Amended bills no longer freeze: bills are keyed by `basePrintNo` with the
+  amendment letter kept in a new `active_version` column; idempotent
+  `ALTER TABLE`s upgrade existing corpora.
+- `get_updates` `type` param now correctly selects the timestamp
+  (`processed` | `published`) per the API docs.
+- Dead committee sync branch removed (the aggregate updates feed never carries
+  committee content); documented as a known limitation instead.
+
+### Added
+
+- Local-first results are annotated with
+  `"source": "local corpus (synced <date>)"` so staleness is visible.
+- `get_updates` gains a `content_type` param (`bills` | `agendas` |
+  `calendars` | `laws`) routing to the documented per-content updates
+  endpoints.
+- `NYS_CORPUS_DB` environment variable overrides the corpus location for both
+  the server and the scripts.
+- Shared `scripts/lib/api-helpers.js` (1-based pagination math,
+  `basePrintNo`) used by both fetch and sync scripts.
+- README: Known limitations section; local-corpus setup now documents the git
+  clone requirement (scripts are not published to npm) and the Node >= 20
+  requirement.
+
+### Changed
+
+- `better-sqlite3` (+ types) moved to `optionalDependencies` so a failed
+  native build no longer breaks `npx` installs; both scripts import it
+  dynamically with a clear error message, and the server degrades to
+  API-only mode.
+- Node engines floor raised to `>=20` (better-sqlite3 v12 supports 20.x+).
+
 ## [2.0.1] - 2026-07-06
 
 ### Fixed
@@ -64,7 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Legislation API — bills, laws, members, committees, calendars, agendas,
   transcripts, updates, and search.
 
-[Unreleased]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v2.0.1...v2.1.0
 [2.0.1]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/BetaNYC/nys-openlegislation-mcp/compare/v1.0.1...v1.0.2

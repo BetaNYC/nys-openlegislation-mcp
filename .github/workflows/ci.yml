@@ -6,13 +6,13 @@ name: CI
 # suite (`npm test`, which runs `tsc` then `node --test`) passes at BOTH ends of
 # the declared Node range before code lands on main.
 #
-# Version safety: package.json declares `engines.node: ">=18"` with no ceiling.
+# Version safety: package.json declares `engines.node: ">=20"` with no ceiling.
 # We test 20 and 22 — the actively-maintained LTS releases within that range.
 # Node 18 reached End-of-Life on 2025-04-30 and is excluded intentionally, so CI
 # only exercises supported runtimes; this matches the rest of BetaNYC's
 # TypeScript MCP fleet (nyc-charter-laws-rules/.github/workflows/test.yml is the
-# canonical precedent). If the engines floor is raised to >=20 in a future
-# release, this comment can be removed. The tests are offline —
+# canonical precedent). The engines floor is now ">=20" — better-sqlite3 v12
+# supports Node 20.x+ only — so the matrix and the floor agree. The tests are offline —
 # dependencies.test.js reads only package.json/package-lock.json,
 # search.test.js mocks `fetch` — so no API key or data/corpus.db is required in CI.
 
@@ -44,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Actively-maintained LTS releases within engines.node: ">=18".
+        # Actively-maintained LTS releases within engines.node: ">=20".
         # 20 = LTS floor tested, 22 = current LTS ceiling. Node 18 is EOL
         # (2025-04-30) and excluded — see the header comment.
         node-version: ["20", "22"]

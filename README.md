@@ -227,6 +227,18 @@ Results are sourced from the NYS Open Legislation API, maintained by the New Yor
 
 ---
 
+## Releases
+
+Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml):
+
+1. Bump `version` in `package.json` in a PR (with a matching `CHANGELOG.md` entry) and merge to main.
+2. Tag the merge commit `v<version>` (e.g. `git tag v2.0.1 && git push origin v2.0.1`).
+3. The workflow runs the test suite, verifies the tag matches `package.json`, publishes to npm with provenance, and creates a GitHub Release with generated notes.
+
+See [CHANGELOG.md](CHANGELOG.md) for version history. Publishing requires the `NPM_TOKEN` org secret (an npm token with publish rights to the `@betanyc` scope).
+
+---
+
 ## About BetaNYC
 
 [BetaNYC](https://beta.nyc) is a civic technology nonprofit improving lives in New York through data, design, and community power. This server is part of a suite of public-interest MCP tools for NYC and NYS civic data.

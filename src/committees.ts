@@ -1,38 +1,5 @@
 import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export type Committee = {
-  chamber: string;
-  name: string;
-  sessionYear: number;
-  reformed: boolean;
-  chair: {
-    memberId: number;
-    shortName: string;
-    fullName: string;
-    districtCode: number;
-  } | null;
-  meetDay: string | null;
-  meetTime: string | null;
-  meetAltWeek: boolean;
-  meetAltWeekText: string | null;
-  location: string | null;
-  subcommittees: string[];
-  parentCommittee: { name: string; chamber: string } | null;
-};
-
-export type CommitteeMeeting = {
-  committeeName: string;
-  committeeChamberId: string;
-  agendaNo: number;
-  year: number;
-  meetingDateTime: string;
-  location: string;
-  notes: string;
-  bills: { items: Array<{ basePrintNo: string; session: number; title: string }>; size: number };
-};
-
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function listCommittees(
@@ -41,12 +8,12 @@ export async function listCommittees(
   chamber: "senate" | "assembly",
   limit = 100,
   offset = 0
-): Promise<PaginatedResult<Committee>> {
+): Promise<unknown> {
   const url = buildUrl(`/committees/${sessionYear}/${chamber}`, apiKey, {
     limit,
     offset,
   });
-  return apiFetch<PaginatedResult<Committee>>(url);
+  return apiFetch<PaginatedResult<unknown>>(url);
 }
 
 export async function getCommittee(
@@ -54,12 +21,12 @@ export async function getCommittee(
   sessionYear: number,
   chamber: "senate" | "assembly",
   committeeName: string
-): Promise<Committee> {
+): Promise<unknown> {
   const url = buildUrl(
     `/committees/${sessionYear}/${chamber}/${encodeURIComponent(committeeName)}`,
     apiKey
   );
-  return apiFetch<Committee>(url);
+  return apiFetch<unknown>(url);
 }
 
 export async function getCommitteeMeetings(
@@ -69,11 +36,11 @@ export async function getCommitteeMeetings(
   committeeName: string,
   limit = 25,
   offset = 0
-): Promise<PaginatedResult<CommitteeMeeting>> {
+): Promise<unknown> {
   const url = buildUrl(
     `/committees/${sessionYear}/${chamber}/${encodeURIComponent(committeeName)}/meetings`,
     apiKey,
     { limit, offset }
   );
-  return apiFetch<PaginatedResult<CommitteeMeeting>>(url);
+  return apiFetch<PaginatedResult<unknown>>(url);
 }

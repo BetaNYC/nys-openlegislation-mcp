@@ -67,12 +67,6 @@ export async function search(
   const contentType = type ?? DEFAULT_SEARCH_TYPE;
 
   if (!isSearchableType(contentType)) {
-    if (contentType === "resolutions") {
-      throw new Error(
-        'Resolutions are not a standalone search endpoint. Search resolutions with type: "bills" ' +
-          "(they share the bills index)."
-      );
-    }
     throw new Error(
       `Unsupported search type "${contentType}". ` +
         `Supported types: ${SEARCHABLE_TYPES.join(", ")}.`

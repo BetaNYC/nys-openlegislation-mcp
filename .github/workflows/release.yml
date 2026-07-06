@@ -1,0 +1,57 @@
+name: Release
+
+# Tag-triggered npm publish + GitHub Release for
+# @betanyc/nys-openlegislation-mcp, mirroring BetaNYC's engineering standards
+# (platform/system/engineering-standards.md in the main workspace).
+#
+# Release flow: bump `version` in package.json via a normal PR → merge to main
+# → push a tag `v<version>` (e.g. `v2.0.1`) → this workflow runs the test
+# suite, verifies the tag matches package.json, publishes to npm with
+# provenance, and creates a GitHub Release with auto-generated notes.
+#
+# Requirements:
+#   - `NPM_TOKEN` org secret with publish rights to @betanyc on npm.
+#   - Node 22 (current LTS within engines.node: ">=20"; matches ci.yml).
+#   - `id-token: write` permission for npm --provenance attestation.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # npm provenance attestation
+
+jobs:
+  publish:
+    name: Publish to npm + GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - name: Install dependencies
+        run: npm ci
+      - name: Test
+        run: npm test --if-present
+      - name: Verify tag matches package.json version
+        run: |
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "v$PKG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version v$PKG_VERSION." \
+                 "Bump the version in a PR, merge it, then tag the merge commit as v$PKG_VERSION."
+            exit 1
+          fi
+      - name: Publish to npm (with provenance)
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Create GitHub Release
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

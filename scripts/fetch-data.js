@@ -19,6 +19,7 @@
 
 import { mkdirSync, existsSync } from "fs";
 import { START_OFFSET, nextOffset, isLastPage, basePrintNo } from "./lib/api-helpers.js";
+import { flattenLawTree } from "./lib/law-tree.js";
 
 let Database;
 try {
@@ -408,24 +409,6 @@ async function fetchLaws() {
     await sleep(DELAY_MS);
   }
   console.log();
-}
-
-function flattenLawTree(node, lawId, acc = []) {
-  if (!node) return acc;
-  const lv = node.lawVersion ?? node;
-  if (lv.locationId) {
-    acc.push({
-      lawId,
-      locationId: lv.locationId,
-      title: lv.title,
-      docType: lv.docType,
-      activeDate: lv.activeDate,
-    });
-  }
-  for (const child of node.children ?? []) {
-    flattenLawTree(child, lawId, acc);
-  }
-  return acc;
 }
 
 async function fetchMembers() {

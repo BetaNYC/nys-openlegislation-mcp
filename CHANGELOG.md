@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-07-07
+
+### Fixed
+
+- `fetch-data.js` now walks the full law document tree. `flattenLawTree` recursed
+  via a non-existent `node.children` key, so every one of the 137 law bodies
+  collapsed to just its root node (137 `law_sections` rows total, and zero
+  section text even with `--include-law-text`). Child documents are nested under
+  `documents.items` (a `{ items, size }` wrapper), confirmed live against
+  `GET /api/3/laws/{lawId}` on 2026-07-07 — Penal Law alone now yields ~900
+  section rows. The helper is extracted to `scripts/lib/law-tree.js` with
+  hermetic regression tests.
+- `LawTreeNode` / `LawTree` types in `src/laws.ts` corrected to the real API
+  shape (node fields sit directly on the node; children nest under
+  `documents.items`, not a `lawVersion` wrapper + `children` array). Types only —
+  no runtime behavior change in the published server.
+
 ## [2.1.0] - 2026-07-06
 
 ### Fixed

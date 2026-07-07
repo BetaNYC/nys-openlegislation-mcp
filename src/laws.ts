@@ -9,28 +9,34 @@ export type LawInfo = {
   chapter: string;
 };
 
+// A node in the law document tree. Confirmed live against
+// GET /api/3/laws/{lawId} on 2026-07-07: node fields sit directly on the node
+// (there is no `lawVersion` wrapper at this level), and child documents are
+// nested under `documents` as a `{ items, size }` wrapper — NOT a `children`
+// array.
 export type LawTreeNode = {
-  lawVersion: {
-    lawId: string;
-    locationId: string;
-    docType: string;
-    docLevelId: string;
-    docNumber: string;
-    activeDate: string;
-    sequenceNo: number;
-    title: string;
-    fromSection: string | null;
-    toSection: string | null;
-    text: string;
-    lawId2: string;
-  };
-  children?: LawTreeNode[];
+  lawId: string;
+  lawName: string;
+  locationId: string;
+  title: string;
+  docType: string;
+  docLevelId: string;
+  activeDate: string;
+  sequenceNo: number;
+  repealedDate: string | null;
+  fromSection: string | null;
+  toSection: string | null;
+  text: string | null;
+  repealed: boolean;
+  publishedDates: string[];
+  documents: { items: LawTreeNode[]; size: number };
 };
 
 export type LawTree = {
+  lawVersion: { lawId: string; activeDate: string };
   info: LawInfo;
+  publishedDates: string[];
   documents: LawTreeNode;
-  publishedDate: string;
 };
 
 export type LawDocument = {

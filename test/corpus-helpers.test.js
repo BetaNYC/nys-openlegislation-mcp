@@ -12,7 +12,91 @@ import {
   isLastPage,
   basePrintNo,
 } from "../scripts/lib/api-helpers.js";
+import { flattenLawTree } from "../scripts/lib/law-tree.js";
 import { isEmptyLocalResult, annotateLocalResult } from "../dist/localResult.js";
+
+// ─── Law tree flattening ───────────────────────────────────────────────────────
+// A minimal law tree in the EXACT shape returned by GET /api/3/laws/{lawId}
+// (confirmed live 2026-07-07): child documents nest under `documents.items`,
+// a `{ items, size }` wrapper — there is no `children` array. This mirrors the
+// real CHAPTER → PART/TITLE/ARTICLE → SECTION hierarchy in miniature.
+function sampleLawTree() {
+  const section = (loc, title) => ({
+    lawId: "PEN",
+    locationId: loc,
+    title,
+    docType: "SECTION",
+    activeDate: "2014-09-04",
+    documents: { items: [], size: 0 },
+  });
+  // result.documents (the root node passed by fetch-data.js)
+  return {
+    lawId: "PEN",
+    locationId: "-CH40",
+    title: "Penal",
+    docType: "CHAPTER",
+    activeDate: "2014-09-04",
+    documents: {
+      size: 1,
+      items: [
+        {
+          lawId: "PEN",
+          locationId: "P1",
+          title: "General Provisions",
+          docType: "PART",
+          activeDate: "2014-09-04",
+          documents: {
+            size: 2,
+            items: [
+              {
+                lawId: "PEN",
+                locationId: "A1",
+                title: "General Purposes",
+                docType: "ARTICLE",
+                activeDate: "2014-09-04",
+                documents: {
+                  size: 2,
+                  items: [section("1.00", "Short title"), section("1.05", "General purposes")],
+                },
+              },
+              section("5.00", "Construction"),
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
+test("flattenLawTree recurses through documents.items, not children", () => {
+  const rows = flattenLawTree(sampleLawTree(), "PEN");
+  // Root CHAPTER + PART + ARTICLE + 3 SECTIONs = 6 nodes.
+  assert.strictEqual(rows.length, 6);
+  const sections = rows.filter((r) => r.docType === "SECTION").map((r) => r.locationId);
+  // Deeply-nested sections must be reached (the `children` bug returned only the root).
+  assert.deepEqual(sections.sort(), ["1.00", "1.05", "5.00"]);
+  assert.ok(rows.every((r) => r.lawId === "PEN"));
+});
+
+test("flattenLawTree ignores a `children` array (the old, wrong key)", () => {
+  // A node shaped the way the buggy code expected: children instead of documents.items.
+  const wrongShape = {
+    locationId: "-CH40",
+    docType: "CHAPTER",
+    children: [{ locationId: "X1", docType: "SECTION", children: [] }],
+  };
+  const rows = flattenLawTree(wrongShape, "PEN");
+  // Only the root is captured — proves `children` is never used for recursion,
+  // which is exactly the collapse the fix prevents on the real API shape.
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].locationId, "-CH40");
+});
+
+test("flattenLawTree tolerates empty and nullish nodes", () => {
+  assert.deepEqual(flattenLawTree(null, "PEN"), []);
+  assert.deepEqual(flattenLawTree(undefined, "PEN"), []);
+  assert.deepEqual(flattenLawTree({ documents: { items: [], size: 0 } }, "PEN"), []);
+});
 
 // ─── 1-based offset math ──────────────────────────────────────────────────────
 // Verified live 2026-07-06: offset=2 returns offsetStart=2 — offsets are

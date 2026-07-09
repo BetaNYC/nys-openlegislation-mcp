@@ -252,16 +252,29 @@ See [CHANGELOG.md](CHANGELOG.md) for version history. Publishing requires the `N
 
 ## About BetaNYC
 
-[BetaNYC](https://beta.nyc) is a civic technology nonprofit improving lives in New York through data, design, and community power. This server is part of a suite of public-interest MCP tools for NYC and NYS civic data.
+This project is built and maintained by [BetaNYC](https://beta.nyc), New York's
+civic technology and open-data community. We work to improve lives in New York
+through civic design, technology, data, and public-interest technology.
 
-**Related BetaNYC MCP servers:**
+**Come do civic tech with us.** We run public events, meetups, and hands-on
+data classes throughout the year — including [NYC School of Data](https://www.schoolofdata.nyc/)
+and [CityCamp NYC](https://citycamp.nyc), and we host frequent civic-tech gatherings. See what's coming up on our
+[events calendar](https://www.beta.nyc/events/).
 
-| Server | npm | What it covers |
-|---|---|---|
-| [nyc-council-mcp](https://github.com/BetaNYC/nyc-council-mcp) | `@betanyc/nyc-council-mcp` | NYC Council bills, hearings, votes via Legistar |
-| [nyc-record-mcp](https://github.com/BetaNYC/nyc-record-mcp) | `@betanyc/nyc-record-mcp` | NYC City Record procurement notices |
-| [nyc-checkbook-mcp](https://github.com/BetaNYC/nyc-checkbook-mcp) | `@betanyc/nyc-checkbook-mcp` | NYC Checkbook spending, contracts, budget |
-| [nyc-charter-laws-rules](https://github.com/BetaNYC/nyc-charter-laws-rules) | `@betanyc/nyc-charter-laws-rules` | NYC Charter, Administrative Code, Rules |
+**Sustain this work.** These MCP servers are free and open source. To help keep this work going and find BetaNYC's
+tools, please consider [donating and becoming a Beta
+Builder](https://beta.nyc/donate).
+
+## Building on this? Tell us!
+
+If you build something with this project, we'd love to hear about it. We can help other New Yorkers find it. BetaNYC publishes a weekly newsletter,
+*This Week in NYC's Civic Technology and Open Data*.
+
+- **[Subscribe to the newsletter](https://beta.nyc/newsletter)** to keep up with
+  NYC civic tech, open data, and public-interest technology.
+- **Built something, or found a story worth sharing?** [Submit a link for the
+  newsletter](https://www.beta.nyc/newsletter-inbox/) and we'll consider it for
+  an upcoming issue.
 
 ---
 

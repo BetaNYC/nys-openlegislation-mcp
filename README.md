@@ -238,6 +238,23 @@ Results are sourced from the NYS Open Legislation API, maintained by the New Yor
 
 ---
 
+## Tests
+
+Two suites, split so that network access is a deliberate choice rather than a side effect of your environment.
+
+```bash
+npm test        # offline, always — safe to run reflexively
+npm run test:live   # real calls to the NYS Open Legislation API; needs a key
+```
+
+`npm test` covers everything under `test/`. It never touches the network, **regardless of whether `NYS_LEGISLATION_API_KEY` is set** — that is enforced by a directory boundary (`test/live/` is outside the default glob) and guarded by `test/offline-by-default.test.js`.
+
+`npm run test:live` runs the smoke tests in `test/live/`, which make one read-only GET per searchable type. Without a key it fails with setup instructions rather than skipping, because reaching it means you asked for it.
+
+This split exists because the previous arrangement gated the live test on the API key being present, which meant a machine configured to *run* this server also made live requests on a plain `npm test`. Having a key is not the same as intending to use it.
+
+---
+
 ## Releases
 
 Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml):

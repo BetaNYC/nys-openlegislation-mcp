@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Unknown tool parameters are now rejected instead of silently dropped**
+  ([#11](https://github.com/BetaNYC/nys-openlegislation-mcp/issues/11)). zod
+  strips unrecognized keys by default, so a call like
+  `search_members(term="Gonzalez", chamber="senate", bogus_unknown_param="x")`
+  returned real, correctly-sourced member records with nothing signalling that a
+  filter had been discarded — a consuming model cannot detect that, and will
+  summarize the result as if it answered the question asked. Two layers now
+  close it: every advertised `inputSchema` sets `additionalProperties: false`
+  (which is what makes the *calling* model aware the parameter is invalid), and
+  every argument parse goes through a strict `parseArgs` helper that names both
+  the offending key and the parameters the tool does accept. All 24 tools are
+  covered; `test/strict-schema.test.js` asserts the schema property across the
+  whole tool array, so tools added later are covered too.
+
+### Changed
+
+- Tool definitions moved to `src/tools.ts` (exported as `TOOLS`) and tool
+  dispatch to `src/handlers.ts` (exported as `callTool`), leaving `src/index.ts`
+  as server wiring only. No tool, parameter, or response shape changed — this
+  lets tests exercise tool dispatch without starting a stdio server.
+
 ## [2.1.1] - 2026-07-07
 
 ### Fixed

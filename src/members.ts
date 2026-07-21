@@ -1,4 +1,4 @@
-import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
+import { apiFetch, buildUrl, type ApiKey, type PaginatedResult } from "./api.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,7 +35,7 @@ export type Member = {
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function listMembers(
-  apiKey: string,
+  apiKey: ApiKey,
   sessionYear: number,
   chamber: "senate" | "assembly",
   limit = 100,
@@ -49,7 +49,7 @@ export async function listMembers(
 }
 
 export async function getMember(
-  apiKey: string,
+  apiKey: ApiKey,
   sessionYear: number,
   memberId: number
 ): Promise<Member> {
@@ -61,7 +61,7 @@ export async function getMember(
 }
 
 export async function searchMembers(
-  apiKey: string,
+  apiKey: ApiKey,
   term: string,
   sessionYear?: number,
   chamber?: "senate" | "assembly",

@@ -24,11 +24,15 @@ Built by [BetaNYC](https://beta.nyc) as part of a suite of civic data MCP server
 
 ## API key
 
-**Yes — a free API key is required.** Get one from the NYS Open Legislation portal and set it as the `NYS_LEGISLATION_API_KEY` environment variable:
+**A free API key is strongly recommended, and required for live data.** Get one from the NYS Open Legislation portal and set it as the `NYS_LEGISLATION_API_KEY` environment variable:
 
 1. Register at **[legislation.nysenate.gov/public](https://legislation.nysenate.gov/public)**
 2. You'll receive an API key by email
 3. Set it as `NYS_LEGISLATION_API_KEY` (e.g. `export NYS_LEGISLATION_API_KEY="your-api-key"`), or pass it in your MCP client's `env` block — see [Installation](#installation)
+
+**Without a key**, the server still starts as long as a [local corpus](#local-corpus-optional) exists, and serves it in local-only mode. Results are labelled with the corpus sync date and a note saying what refreshes them. The 6 tools with no local coverage (`get_bill_votes`, `get_bill_updates`, `search_members`, `get_committee_meetings`, `get_updates`, `search`) return a message naming the key rather than failing opaquely, and a lookup that finds nothing in the corpus says so explicitly — offline, "not in the corpus" and "does not exist" are not the same claim.
+
+The server refuses to start only when **both** the key and the corpus are missing.
 
 Bill URLs returned by this server point to the public [nysenate.gov](https://www.nysenate.gov/legislation) website — no login required.
 
@@ -86,6 +90,8 @@ Then in your MCP config:
 ## Local corpus (optional)
 
 By default the server queries the live NYS Open Legislation API on every request. If you run large workloads — bulk research, repeated searches, or offline use — you can build a local SQLite corpus that the server queries first, falling back to the API only on a cache miss.
+
+The corpus is also what makes the server usable **without** an API key: with a corpus present and no key, it starts in local-only mode instead of exiting. Building the corpus in the first place does require a key (`npm run sync` calls the live API), so this is a "borrow a colleague's corpus" or "key expired" path, not a way to skip registration entirely. The corpus location defaults to `data/corpus.db` in the package and can be overridden with `NYS_CORPUS_DB`.
 
 ### Requirements
 

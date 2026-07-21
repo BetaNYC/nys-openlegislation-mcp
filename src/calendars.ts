@@ -1,4 +1,4 @@
-import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
+import { apiFetch, buildUrl, type ApiKey, type PaginatedResult } from "./api.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ export type SupplementalCalendar = {
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function listCalendars(
-  apiKey: string,
+  apiKey: ApiKey,
   year: number,
   limit = 50,
   offset = 0
@@ -64,7 +64,7 @@ export async function listCalendars(
 }
 
 export async function getCalendar(
-  apiKey: string,
+  apiKey: ApiKey,
   year: number,
   calendarNo: number
 ): Promise<CalendarEntry> {

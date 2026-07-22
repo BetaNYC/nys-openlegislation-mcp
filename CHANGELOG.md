@@ -30,6 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as server wiring only. No tool, parameter, or response shape changed — this
   lets tests exercise tool dispatch without starting a stdio server.
 
+### Changed
+
+- **`npm test` is now offline unconditionally** ([#14](https://github.com/BetaNYC/nys-openlegislation-mcp/issues/14)). The live smoke test moved from `test/search.live.test.js` to `test/live/search.test.js`, outside the default `test/*.test.js` glob, and is run deliberately with the new `npm run test:live`.
+
+  Previously the live test gated itself on `NYS_LEGISLATION_API_KEY` being present. That skipped correctly in CI, which has no key — but on a machine configured to *run* this server the key is exported, so a plain `npm test` quietly made real requests to the NYS Open Legislation API. Key presence was standing in for intent, and those are different things.
+
+  Network access is now a directory boundary rather than an environment check, guarded by `test/offline-by-default.test.js`. `release.yml` runs `npm test --if-present` before publishing, so this also makes the publish path structurally incapable of live calls rather than incidentally offline.
+
+- **`npm run test:live` fails rather than skips when no key is set.** Reaching it means the caller asked for the live suite; a silent skip there reads as a pass. The failure names the key, the registration URL, and the export line.
+
 ## [2.1.1] - 2026-07-07
 
 ### Fixed

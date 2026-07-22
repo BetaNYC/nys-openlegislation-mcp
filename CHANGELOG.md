@@ -5,6 +5,44 @@ All notable changes to `@betanyc/nys-openlegislation-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - unreleased
+
+### Changed
+
+- **The server now starts without an API key when a local corpus is present**
+  ([#13](https://github.com/BetaNYC/nys-openlegislation-mcp/issues/13)).
+  Previously a missing `NYS_LEGISLATION_API_KEY` was fatal: `src/index.ts`
+  called `process.exit(1)` before a server object existed, so MCP clients showed
+  "server failed to start" or simply never listed the tools — and a perfectly
+  usable local corpus on disk was thrown away. The key and the corpus are now
+  checked independently, and the server refuses to start only when **both** are
+  missing, which is the genuinely unusable case. The active mode
+  (hybrid / live-only / local-only) is logged to stderr at startup; stdout stays
+  reserved for the MCP JSON channel.
+- **Locally-served results say what would refresh them when keyless.**
+  `annotateLocalResult` already stamped `source: "local corpus (synced <ts>)"`.
+  In local-only mode the payload now also carries `freshness`, naming the env
+  var to set and the `npm run sync` that refreshes the corpus. A consuming model
+  needs to be able to tell the user *why* data may be stale and *what to do*,
+  not merely that a sync date exists. Nothing changes when a key is set.
+
+### Fixed
+
+- **An empty local result in keyless mode no longer reads as "does not exist."**
+  Empty local results fall through to the live API by design — the corpus may
+  not have synced that slice yet. With no key there is nothing to fall through
+  to, so returning a bare empty payload would answer a question the server
+  cannot actually answer. Keyless empty results now return
+  `result: "not_found_in_local_corpus"` with an explanation that existence is
+  unconfirmed and a live lookup is what would confirm it.
+- **Live-only tools now refuse by name rather than failing opaquely.** The 6 of
+  24 tools with no local path (`get_bill_votes`, `get_bill_updates`,
+  `search_members`, `get_committee_meetings`, `get_updates`, `search`) return
+  `Tool '<name>' requires the live NYS Open Legislation API`, followed by where
+  to get a free key and how to set it. The guard lives in `buildUrl`, which
+  every live call already routes through, so there is no allowlist of live-only
+  tools to keep in sync and tools added later are covered automatically.
+
 ## [2.2.0] - unreleased
 
 ### Fixed

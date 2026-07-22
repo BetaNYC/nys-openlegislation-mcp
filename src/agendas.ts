@@ -1,4 +1,4 @@
-import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
+import { apiFetch, buildUrl, type ApiKey, type PaginatedResult } from "./api.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,7 +56,7 @@ export type Agenda = {
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function listAgendas(
-  apiKey: string,
+  apiKey: ApiKey,
   year: number,
   limit = 50,
   offset = 0
@@ -66,7 +66,7 @@ export async function listAgendas(
 }
 
 export async function getAgenda(
-  apiKey: string,
+  apiKey: ApiKey,
   year: number,
   agendaNo: number
 ): Promise<Agenda> {

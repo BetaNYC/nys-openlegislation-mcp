@@ -1,4 +1,4 @@
-import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
+import { apiFetch, buildUrl, type ApiKey, type PaginatedResult } from "./api.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,7 +20,7 @@ export type HearingTranscript = {
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function listFloorTranscripts(
-  apiKey: string,
+  apiKey: ApiKey,
   year: number,
   limit = 50,
   offset = 0
@@ -30,7 +30,7 @@ export async function listFloorTranscripts(
 }
 
 export async function getFloorTranscript(
-  apiKey: string,
+  apiKey: ApiKey,
   dateTime: string
 ): Promise<FloorTranscript> {
   // dateTime format: ISO-8601, e.g. "2025-01-15T10:30:00"
@@ -39,7 +39,7 @@ export async function getFloorTranscript(
 }
 
 export async function listHearingTranscripts(
-  apiKey: string,
+  apiKey: ApiKey,
   year: number,
   limit = 50,
   offset = 0
@@ -49,7 +49,7 @@ export async function listHearingTranscripts(
 }
 
 export async function getHearingTranscript(
-  apiKey: string,
+  apiKey: ApiKey,
   filename: string
 ): Promise<HearingTranscript> {
   const url = buildUrl(`/hearings/${encodeURIComponent(filename)}`, apiKey);

@@ -1,4 +1,4 @@
-import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
+import { apiFetch, buildUrl, type ApiKey, type PaginatedResult } from "./api.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,14 +55,14 @@ export type LawDocument = {
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function listLaws(
-  apiKey: string
+  apiKey: ApiKey
 ): Promise<PaginatedResult<LawInfo>> {
   const url = buildUrl("/laws", apiKey, { limit: 200 });
   return apiFetch<PaginatedResult<LawInfo>>(url);
 }
 
 export async function getLawTree(
-  apiKey: string,
+  apiKey: ApiKey,
   lawId: string
 ): Promise<LawTree> {
   const url = buildUrl(`/laws/${lawId}`, apiKey);
@@ -70,7 +70,7 @@ export async function getLawTree(
 }
 
 export async function getLawSection(
-  apiKey: string,
+  apiKey: ApiKey,
   lawId: string,
   locationId: string
 ): Promise<LawDocument> {

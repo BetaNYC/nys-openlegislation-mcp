@@ -1,4 +1,4 @@
-import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
+import { apiFetch, buildUrl, type ApiKey, type PaginatedResult } from "./api.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ export type CommitteeMeeting = {
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function listCommittees(
-  apiKey: string,
+  apiKey: ApiKey,
   sessionYear: number,
   chamber: "senate" | "assembly",
   limit = 100,
@@ -50,7 +50,7 @@ export async function listCommittees(
 }
 
 export async function getCommittee(
-  apiKey: string,
+  apiKey: ApiKey,
   sessionYear: number,
   chamber: "senate" | "assembly",
   committeeName: string
@@ -63,7 +63,7 @@ export async function getCommittee(
 }
 
 export async function getCommitteeMeetings(
-  apiKey: string,
+  apiKey: ApiKey,
   sessionYear: number,
   chamber: "senate" | "assembly",
   committeeName: string,

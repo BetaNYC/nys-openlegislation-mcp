@@ -1,4 +1,4 @@
-import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
+import { apiFetch, buildUrl, type ApiKey, type PaginatedResult } from "./api.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ export type UpdateContentType = (typeof UPDATE_CONTENT_TYPES)[number];
  * @param contentType restrict to one content type (bills, agendas, calendars, laws)
  */
 export async function getUpdates(
-  apiKey: string,
+  apiKey: ApiKey,
   from: string,
   to: string,
   type?: "processed" | "published",

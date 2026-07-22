@@ -1,4 +1,4 @@
-import { apiFetch, buildUrl, withBillUrl, type PaginatedResult } from "./api.js";
+import { apiFetch, buildUrl, type ApiKey, withBillUrl, type PaginatedResult } from "./api.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ export type BillUpdate = {
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function getBill(
-  apiKey: string,
+  apiKey: ApiKey,
   sessionYear: number,
   printNo: string,
   fullText = false
@@ -103,7 +103,7 @@ export async function getBill(
 }
 
 export async function searchBills(
-  apiKey: string,
+  apiKey: ApiKey,
   term: string,
   sessionYear?: number,
   limit = 25,
@@ -122,7 +122,7 @@ export async function searchBills(
 }
 
 export async function listBills(
-  apiKey: string,
+  apiKey: ApiKey,
   sessionYear: number,
   limit = 25,
   offset = 0
@@ -136,7 +136,7 @@ export async function listBills(
 }
 
 export async function getBillVotes(
-  apiKey: string,
+  apiKey: ApiKey,
   sessionYear: number,
   printNo: string
 ): Promise<{ items: BillVote[]; size: number }> {
@@ -145,7 +145,7 @@ export async function getBillVotes(
 }
 
 export async function getBillUpdates(
-  apiKey: string,
+  apiKey: ApiKey,
   from: string,
   to: string,
   limit = 50,

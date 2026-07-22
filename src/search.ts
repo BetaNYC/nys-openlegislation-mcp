@@ -1,4 +1,4 @@
-import { apiFetch, buildUrl, type PaginatedResult } from "./api.js";
+import { apiFetch, buildUrl, type ApiKey, type PaginatedResult } from "./api.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ export function isSearchableType(value: string): value is SearchableType {
  * surfacing a raw upstream 404.
  */
 export async function search(
-  apiKey: string,
+  apiKey: ApiKey,
   term: string,
   type?: string,
   sessionYear?: number,

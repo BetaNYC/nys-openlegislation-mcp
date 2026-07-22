@@ -7,7 +7,12 @@
  */
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { withDisclaimer, currentSessionYear } from "./api.js";
+import {
+  withDisclaimer,
+  currentSessionYear,
+  MissingApiKeyError,
+  type ApiKey,
+} from "./api.js";
 import { parseArgs } from "./tools.js";
 import {
   getBill,
@@ -32,7 +37,11 @@ import {
   getHearingTranscript,
 } from "./transcripts.js";
 import { getUpdates } from "./updates.js";
-import { isEmptyLocalResult, annotateLocalResult } from "./localResult.js";
+import {
+  isEmptyLocalResult,
+  annotateLocalResult,
+  notInLocalCorpus,
+} from "./localResult.js";
 import { search } from "./search.js";
 import {
   localGetBill,
@@ -55,24 +64,35 @@ import {
   localGetHearingTranscript,
 } from "./db.js";
 
-/**
- * Wrap a local corpus result into a tool response, or return null to fall
- * through to the live API. Empty local results (0 items) never shadow live
- * data; served results carry a `source: "local corpus (synced <date>)"` note.
- */
-async function localResponse(
-  local: unknown
-): Promise<CallToolResult | null> {
-  if (local == null || isEmptyLocalResult(local)) return null;
-  const annotated = await annotateLocalResult(local as object);
-  return { content: [{ type: "text", text: withDisclaimer(annotated) }] };
-}
-
 export async function callTool(
-  apiKey: string,
+  apiKey: ApiKey,
   name: string,
   args: unknown
 ): Promise<CallToolResult> {
+  /**
+   * Wrap a local corpus result into a tool response, or return null to fall
+   * through to the live API. Served results carry a
+   * `source: "local corpus (synced <date>)"` note.
+   *
+   * Declared inside `callTool` purely so it closes over `apiKey` — the keyless
+   * branch needs it, and threading a parameter through all 18 call sites would
+   * be a far larger diff than moving one function.
+   *
+   * Empty local results normally fall through to live data. Keyless there is no
+   * live data to fall through to, so they get an explicit not-found-in-corpus
+   * response instead of a bare empty payload (issue #13).
+   */
+  async function localResponse(local: unknown): Promise<CallToolResult | null> {
+    if (local == null || isEmptyLocalResult(local)) {
+      if (apiKey) return null;
+      return {
+        content: [{ type: "text", text: withDisclaimer(await notInLocalCorpus()) }],
+      };
+    }
+    const annotated = await annotateLocalResult(local as object, !apiKey);
+    return { content: [{ type: "text", text: withDisclaimer(annotated) }] };
+  }
+
   try {
     switch (name) {
       // ── Bills ───────────────────────────────────────────────────────────────
@@ -402,6 +422,19 @@ export async function callTool(
         };
     }
   } catch (err) {
+    if (err instanceof MissingApiKeyError) {
+      // Named, not a generic `Error:` — the caller needs to know which tool is
+      // unavailable and that the fix is configuration, not a retry.
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Tool '${name}' requires the live NYS Open Legislation API. ${err.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
     const message = err instanceof Error ? err.message : String(err);
     return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
   }

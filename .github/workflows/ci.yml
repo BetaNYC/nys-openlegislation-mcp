@@ -14,7 +14,8 @@ name: CI
 # canonical precedent). The engines floor is now ">=20" — better-sqlite3 v12
 # supports Node 20.x+ only — so the matrix and the floor agree. The tests are offline —
 # dependencies.test.js reads only package.json/package-lock.json,
-# search.test.js mocks `fetch` — so no API key or data/corpus.db is required in CI.
+# search.test.js and strict-schema.test.js mock `fetch` — so no API key or
+# data/corpus.db is required in CI.
 
 on:
   pull_request:

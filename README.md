@@ -152,6 +152,12 @@ Law section text and transcript full text fall back to the API unless `--include
 
 ## Tools
 
+Every tool rejects parameters it does not declare, rather than ignoring them.
+Passing an undeclared key returns an error naming both the offending key and the
+parameters that tool accepts. This is deliberate: silently dropping a filter
+returns real, correctly-sourced data that answers a *different* question, and
+nothing in the response would signal it.
+
 ### Bills
 
 | Tool | Description |

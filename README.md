@@ -169,7 +169,7 @@ nothing in the response would signal it.
 
 | Tool | Description |
 |---|---|
-| `search_bills` | Full-text bill search with ElasticSearch syntax, optional session year filter (omit it to search all sessions) |
+| `search_bills` | Full-text bill search with ElasticSearch syntax, optional session year filter (omit it to search all sessions; all sessions in the local corpus, when it answers) |
 | `get_bill` | Get a specific bill by print number (e.g. `S1234`) and session year |
 | `list_bills` | List bills introduced in a session year |
 | `get_bill_votes` | Get committee and floor vote records for a bill (the `votes` block of the bill record) |
@@ -188,8 +188,8 @@ nothing in the response would signal it.
 | Tool | Description |
 |---|---|
 | `list_members` | List Senate or Assembly members for a session year |
-| `get_member` | Get a specific legislator by member ID; errors if the member is in the other chamber |
-| `search_members` | Search legislators by name; each row carries `fullName` and `chamber`. Defaults to the current session. Served from the local corpus when present (works without a key) |
+| `get_member` | Get a specific legislator by member ID; errors if the member sits in the other chamber from `chamber` |
+| `search_members` | Search legislators by name; every row carries `chamber`, and `fullName` where known (a locally served member who has never prime-sponsored a bill has none). Defaults to the current session. Served from the local corpus when present (works without a key) |
 
 ### Committees
 

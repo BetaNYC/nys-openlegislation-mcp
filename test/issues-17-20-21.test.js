@@ -263,6 +263,12 @@ test("#17 searchMembers sends chamber as a documented field clause, session in t
   assert.equal(url.searchParams.get("session"), null, "the undocumented `session` param must not be sent");
 });
 
+test("#17 an empty term with a chamber sends a chamber-only clause, not `() AND`", async () => {
+  const calls = installFetchMock(MEMBER_SEARCH);
+  await searchMembers("test-key", "  ", 2025, "assembly");
+  assert.equal(new URL(calls[0]).searchParams.get("term"), "chamber:ASSEMBLY");
+});
+
 test("#17 searchMembers without chamber or session leaves the term alone", async () => {
   const calls = installFetchMock(MEMBER_SEARCH);
   await searchMembers("test-key", "districtCode:20");

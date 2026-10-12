@@ -97,7 +97,12 @@ export function memberSearchPath(sessionYear?: number): string {
  * https://legislation.nysenate.gov/static/docs/html/search_api.html#term
  */
 export function memberSearchTerm(term: string, chamber?: "senate" | "assembly"): string {
-  return chamber ? `(${term}) AND chamber:${chamber.toUpperCase()}` : term;
+  if (!chamber) return term;
+  const clause = `chamber:${chamber.toUpperCase()}`;
+  // A bare field query is a valid term on its own (members.html example:
+  // `term=districtCode:20`), so an empty term becomes chamber-only rather than
+  // the malformed `() AND chamber:X`.
+  return term.trim() ? `(${term}) AND ${clause}` : clause;
 }
 
 export async function searchMembers(

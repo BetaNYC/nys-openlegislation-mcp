@@ -29,7 +29,7 @@ export const TOOLS: Tool[] = [
         term: { type: "string", description: "Search term or ElasticSearch query string" },
         session_year: {
           type: "number",
-          description: "Legislative session year (odd-numbered, e.g. 2025). Omit to search all sessions.",
+          description: "Legislative session year (odd-numbered, e.g. 2025). Omit to search all sessions (all sessions in the local corpus, when it answers).",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
         offset: { type: "number", description: "Pagination offset (default 0)" },
@@ -203,7 +203,8 @@ export const TOOLS: Tool[] = [
     name: "get_member",
     description:
       "Get a specific NYS legislator by their member ID. " +
-      "Returns full profile including name, district, contact info, and party.",
+      "Returns full profile including name, district, contact info, and party. " +
+      "Errors if the member sits in the other chamber from `chamber`.",
     inputSchema: {
       additionalProperties: false,
       type: "object",
@@ -228,8 +229,9 @@ export const TOOLS: Tool[] = [
   {
     name: "search_members",
     description:
-      "Search for NYS legislators by name. Every result carries fullName and chamber, " +
-      "so similar names can be told apart. Optionally filter by chamber or session year. " +
+      "Search for NYS legislators by name. Every result carries `chamber`, and `fullName` where known " +
+      "(a locally served member who has never prime-sponsored a bill has none), so similar names can be " +
+      "told apart. Optionally filter by chamber or session year. " +
       "Served from the local corpus when present (substring match on short and full name, " +
       "works without an API key); otherwise, or when nothing matches locally, from the live " +
       "API, where ElasticSearch field queries such as 'districtCode:20' also work.",

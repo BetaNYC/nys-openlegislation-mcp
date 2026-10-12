@@ -12,8 +12,10 @@
  * and the corpus already stores every bill's raw JSON. So names are recovered
  * from data already on disk: no network calls.
  *
- * Idempotent: only rows whose full_name is NULL are touched, and the bill scan
- * is skipped entirely when there are none.
+ * Idempotent: only rows whose full_name is NULL are touched. The bill scan is
+ * skipped only when no row is NULL. Members who have never prime-sponsored a
+ * bill stay NULL, so in practice the scan (about 2s on the full corpus) re-runs
+ * on most syncs; that is cheap enough not to track which rows were tried.
  */
 
 /** Add members.full_name to an older corpus. Cheap and safe to re-run. */

@@ -29,7 +29,7 @@ export const TOOLS: Tool[] = [
         term: { type: "string", description: "Search term or ElasticSearch query string" },
         session_year: {
           type: "number",
-          description: "Legislative session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Legislative session year (odd-numbered, e.g. 2025). Omit to search all sessions.",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
         offset: { type: "number", description: "Pagination offset (default 0)" },
@@ -80,7 +80,8 @@ export const TOOLS: Tool[] = [
     name: "get_bill_votes",
     description:
       "Get all recorded votes on a specific NYS bill, including committee and floor votes. " +
-      "Returns each member's vote (Aye, Nay, Abstain, Absent, etc.).",
+      "Returns each member's vote grouped by vote code (AYE, NAY, EXC, ABS, etc.). " +
+      "These are the `votes` from the bill record; a bill with no recorded votes returns an empty list.",
     inputSchema: {
       additionalProperties: false,
       type: "object",
@@ -227,8 +228,11 @@ export const TOOLS: Tool[] = [
   {
     name: "search_members",
     description:
-      "Search for NYS legislators by name or keyword. " +
-      "Optionally filter by chamber or session year.",
+      "Search for NYS legislators by name. Every result carries fullName and chamber, " +
+      "so similar names can be told apart. Optionally filter by chamber or session year. " +
+      "Served from the local corpus when present (substring match on short and full name, " +
+      "works without an API key); otherwise, or when nothing matches locally, from the live " +
+      "API, where ElasticSearch field queries such as 'districtCode:20' also work.",
     inputSchema: {
       additionalProperties: false,
       type: "object",

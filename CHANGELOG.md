@@ -5,6 +5,47 @@ All notable changes to `@betanyc/nys-openlegislation-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`get_bill_votes` no longer returns 404 for every bill**
+  ([#20](https://github.com/BetaNYC/nys-openlegislation-mcp/issues/20)).
+  It requested `/bills/{session}/{printNo}/votes`, which is not an Open
+  Legislation route. Votes are part of the bill record
+  ([docs](https://legislation.nysenate.gov/static/docs/html/bills.html#get-a-single-bill)),
+  so the tool now fetches the bill with `view=no_fulltext` and returns its
+  `votes` block. A bill with no recorded votes returns an empty list.
+- **`session_year` now actually filters `search_bills` and `search` (`type: "bills"`)**
+  ([#21](https://github.com/BetaNYC/nys-openlegislation-mcp/issues/21)).
+  The year was sent as a `session` query parameter, which the API ignores, so
+  results spanned every session. It now goes in the path, `/bills/{sessionYear}/search`,
+  as [documented](https://legislation.nysenate.gov/static/docs/html/bills.html#search-for-bills).
+  The `search_bills` schema no longer claims a current-session default it never
+  applied: omit `session_year` to search all sessions.
+- **`get_member` no longer returns a member from the wrong chamber**
+  ([#17](https://github.com/BetaNYC/nys-openlegislation-mcp/issues/17)).
+  When the local lookup correctly missed, the live fallback ignored `chamber`
+  and returned, for example, an Assembly member for a Senate-scoped request.
+  A chamber mismatch is now an error that names the member's real chamber.
+- **`search_members` can be disambiguated** (#17). `chamber` now filters (it was
+  sent as a query parameter the API ignores; it is now an ElasticSearch
+  `chamber:` field clause, per the
+  [search docs](https://legislation.nysenate.gov/static/docs/html/search_api.html#term)),
+  the session year goes in the path (`/members/{sessionYear}/search`), and
+  `full=true` is requested, so every row carries `fullName` and `chamber`.
+  `session_year` now defaults to the current session, as the schema already said.
+
+### Added
+
+- **`search_members` is served from the local corpus, including without an API key** (#17).
+  A case-insensitive name match over short and full names, with chamber and
+  session filtered in SQL. Terms that match nothing locally (for example
+  ElasticSearch field queries) fall through to the live API when a key is set.
+- **`members.full_name` in the corpus**, filled from bill sponsor records the
+  corpus already holds, by both `npm run sync` and `fetch-data.js`. No extra API
+  calls; existing corpora gain the column on their next sync.
+
 ## [2.3.0] - unreleased
 
 ### Changed

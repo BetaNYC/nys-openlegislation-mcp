@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   corpus already holds, by both `npm run sync` and `fetch-data.js`. No extra API
   calls; existing corpora gain the column on their next sync.
 
-## [2.3.0] - unreleased
+## [2.3.0] - 2026-07-22
 
 ### Changed
 

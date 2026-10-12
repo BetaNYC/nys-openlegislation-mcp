@@ -278,17 +278,17 @@ test("the same empty local result WITH a key still falls through to the live API
 });
 
 // ─── 4. Tools with no local coverage ─────────────────────────────────────────
-// 6 of the 24 tools have no corpus path. They are not enumerated anywhere: they
+// 5 of the 24 tools have no corpus path (search_members gained one in #17). They are not enumerated anywhere: they
 // reach buildUrl, which throws, and so will any tool added later.
 
 test("a live-only tool called without a key gives a named error, not a generic failure", async () => {
   const calls = installFetchMock();
-  const res = await callTool(null, "search_members", { term: "Gonzalez", chamber: "senate" });
+  const res = await callTool(null, "get_bill_votes", { print_no: "S1234", session_year: 2025 });
   const text = res.content[0].text;
 
   assert.equal(res.isError, true, text);
   assert.equal(calls.length, 0, "a keyless live call must not reach the network");
-  assert.match(text, /search_members/, "the error must name the tool that is unavailable");
+  assert.match(text, /get_bill_votes/, "the error must name the tool that is unavailable");
   assert.doesNotMatch(text, /^Error: /, "must not surface as a generic Error:");
   assert.match(text, /NYS_LEGISLATION_API_KEY/);
   assert.match(text, /legislation\.nysenate\.gov\/register/, "must link where to get a key");
@@ -299,7 +299,6 @@ test("every live-only tool refuses the same way — no allowlist to drift", asyn
   const liveOnly = [
     ["get_bill_votes", { print_no: "S1234", session_year: 2025 }],
     ["get_bill_updates", { from: "2026-01-01T00:00:00", to: "2026-01-02T00:00:00" }],
-    ["search_members", { term: "Gonzalez" }],
     ["get_committee_meetings", { committee_name: "Finance", chamber: "senate" }],
     ["get_updates", { from: "2026-01-01T00:00:00", to: "2026-01-02T00:00:00" }],
     ["search", { term: "climate" }],

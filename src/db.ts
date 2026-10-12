@@ -228,6 +228,65 @@ export async function localGetMember(
   }
 }
 
+/**
+ * Name search over the local members table (issue #17).
+ *
+ * A case-insensitive substring match on short_name and, when the corpus has it,
+ * full_name (backfilled from bill sponsor blocks by the corpus scripts). Unlike
+ * the live API, `chamber` and `sessionYear` are applied here in SQL, so they
+ * always filter. Every row carries `chamber` and `fullName` — the two fields a
+ * caller needs to tell Kristen Gonzalez (SD 59) from Jessica Gonzalez-Rojas
+ * (AD 34) without a follow-up lookup per candidate.
+ *
+ * This is NOT ElasticSearch: a field query such as `districtCode:20` matches
+ * nothing here and, with an API key, falls through to the live search.
+ */
+export async function localSearchMembers(
+  term: string,
+  sessionYear?: number,
+  chamber?: string,
+  limit = 25,
+  offset = 0
+): Promise<{ items: Record<string, unknown>[]; size: number } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  try {
+    const cols = ((db as any).prepare("PRAGMA table_info(members)").all() as Array<{ name: string }>)
+      .map((c) => c.name);
+    const hasFullName = cols.includes("full_name");
+    // Escape LIKE wildcards so a literal % or _ in a name is matched literally.
+    const pattern = `%${term.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const where = [
+      hasFullName
+        ? "(short_name LIKE ? ESCAPE '\\' OR full_name LIKE ? ESCAPE '\\')"
+        : "short_name LIKE ? ESCAPE '\\'",
+    ];
+    const params: unknown[] = hasFullName ? [pattern, pattern] : [pattern];
+    if (sessionYear) {
+      where.push("session_year = ?");
+      params.push(sessionYear);
+    }
+    if (chamber) {
+      where.push("chamber = ?");
+      params.push(chamber.toUpperCase());
+    }
+    const rows = (db as any)
+      .prepare(
+        `SELECT raw_json, chamber, ${hasFullName ? "full_name" : "NULL AS full_name"}
+         FROM members WHERE ${where.join(" AND ")}
+         ORDER BY session_year DESC, short_name LIMIT ? OFFSET ?`
+      )
+      .all(...params, limit, offset) as Array<{ raw_json: string; chamber: string; full_name: string | null }>;
+    const items = rows.map((r) => {
+      const m = JSON.parse(r.raw_json);
+      return { ...m, chamber: r.chamber, fullName: r.full_name ?? m.fullName ?? null };
+    });
+    return { items, size: items.length };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Committees ───────────────────────────────────────────────────────────────
 
 export async function localListCommittees(

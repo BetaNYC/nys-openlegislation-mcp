@@ -85,10 +85,13 @@ test("omitting type defaults to bills", async () => {
   assert.strictEqual(url.pathname, "/api/3/bills/search");
 });
 
-test("session year is sent only for bills search", async () => {
+test("session year scopes bills search by path, and only bills", async () => {
+  // /bills/{sessionYear}/search is the documented form; a `session` query
+  // param is silently ignored upstream (issue #21).
   let calls = installFetchMock();
   await search(API_KEY, "tourism", "bills", 2025);
-  assert.strictEqual(new URL(calls[0]).searchParams.get("session"), "2025");
+  assert.strictEqual(new URL(calls[0]).pathname, "/api/3/bills/2025/search");
+  assert.strictEqual(new URL(calls[0]).searchParams.get("session"), null);
 
   mock.restoreAll();
   calls = installFetchMock();

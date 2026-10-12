@@ -17,6 +17,7 @@
 
 import { existsSync } from "fs";
 import { START_OFFSET, nextOffset, isLastPage, basePrintNo } from "./lib/api-helpers.js";
+import { backfillMemberFullNames } from "./lib/members.js";
 
 let Database;
 try {
@@ -247,6 +248,12 @@ const startTime = Date.now();
 const { totalProcessed: count, totalFailed: failed } = await syncUpdates();
 
 if (!DRY_RUN) {
+  // Fill members.full_name from bill sponsor blocks (issue #17). Adds the
+  // column on older corpora; a no-op once every row is named.
+  const { filled, missing } = backfillMemberFullNames(db);
+  if (filled || missing) {
+    console.log(`  Member full names: ${filled} filled, ${missing} without a sponsored bill`);
+  }
   if (failed === 0) {
     setSyncState.run("last_synced_at", toDateTime);
   } else {

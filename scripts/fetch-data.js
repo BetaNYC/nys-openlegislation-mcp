@@ -20,6 +20,7 @@
 import { mkdirSync, existsSync } from "fs";
 import { START_OFFSET, nextOffset, isLastPage, basePrintNo } from "./lib/api-helpers.js";
 import { flattenLawTree } from "./lib/law-tree.js";
+import { backfillMemberFullNames, ensureMemberFullNameColumn } from "./lib/members.js";
 
 let Database;
 try {
@@ -122,6 +123,7 @@ db.exec(`
     short_name   TEXT,
     district     INTEGER,
     raw_json     TEXT,
+    full_name    TEXT,
     PRIMARY KEY (member_id, session_year, chamber)
   );
 
@@ -272,6 +274,9 @@ const upsertLawSection = db.prepare(`
   ON CONFLICT(law_id, location_id) DO UPDATE SET
     title=excluded.title, has_text=excluded.has_text, raw_json=excluded.raw_json
 `);
+
+// Older corpora predate members.full_name (issue #17); add it before use.
+ensureMemberFullNameColumn(db);
 
 const upsertMember = db.prepare(`
   INSERT INTO members (member_id, session_year, chamber, short_name, district, raw_json)
@@ -603,6 +608,13 @@ if (TYPES.has("committees"))  await fetchCommittees();
 if (TYPES.has("agendas"))     await fetchAgendas();
 if (TYPES.has("calendars"))   await fetchCalendars();
 if (TYPES.has("transcripts")) await fetchTranscripts();
+
+// Member full names come from bill sponsor blocks already in the corpus, so
+// this runs after bills and members are both in place. No network calls.
+if (TYPES.has("bills") || TYPES.has("members")) {
+  const { filled, missing } = backfillMemberFullNames(db);
+  console.log(`\n👤 Member full names: ${filled} filled, ${missing} without a sponsored bill`);
+}
 
 // Persist config to sync_state
 const now = new Date().toISOString().split(".")[0]; // ISO 8601 with T — matches sync.js expectation

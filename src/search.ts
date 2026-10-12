@@ -1,4 +1,5 @@
 import { apiFetch, buildUrl, type ApiKey, type PaginatedResult } from "./api.js";
+import { billSearchPath } from "./bills.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,11 +80,13 @@ export async function search(
     );
   }
 
-  const params: Record<string, string | number> = { term, limit, offset };
-  // `session` only applies to the bills index; the API ignores it elsewhere,
-  // but we keep it scoped to avoid sending a no-op param to other endpoints.
-  if (sessionYear && contentType === "bills") params.session = sessionYear;
+  // For bills the session year is a PATH segment, /bills/{sessionYear}/search
+  // (issue #21); a `session` query param is silently ignored upstream.
+  // https://legislation.nysenate.gov/static/docs/html/bills.html#search-for-bills
+  // Other content types are not session-scoped and do not take it.
+  const path =
+    contentType === "bills" ? billSearchPath(sessionYear) : `/${contentType}/search`;
 
-  const url = buildUrl(`/${contentType}/search`, apiKey, params);
+  const url = buildUrl(path, apiKey, { term, limit, offset });
   return apiFetch<PaginatedResult<SearchResult>>(url);
 }

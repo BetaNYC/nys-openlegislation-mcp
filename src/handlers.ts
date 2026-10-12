@@ -52,6 +52,7 @@ import {
   localGetLawSection,
   localListMembers,
   localGetMember,
+  localSearchMembers,
   localListCommittees,
   localGetCommittee,
   localListAgendas,
@@ -136,7 +137,8 @@ export async function callTool(
 
       case "get_bill_votes": {
         const { print_no, session_year } = parseArgs(name, { print_no: z.string(), session_year: z.number().optional() }, args);
-        // Votes always fetched live — they change frequently
+        // Votes always fetched live — they change frequently. They come from
+        // the bill response; there is no separate votes endpoint (issue #20).
         const results = await getBillVotes(apiKey, session_year ?? currentSessionYear(), print_no);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
@@ -209,7 +211,9 @@ export async function callTool(
         const local = await localGetMember(year, chamber, member_id);
         const localResp = await localResponse(local);
         if (localResp) return localResp;
-        const result = await getMember(apiKey, year, member_id);
+        // chamber is passed so a live result from the other chamber is an
+        // error, not a silent substitute (issue #17).
+        const result = await getMember(apiKey, year, member_id, chamber);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };
       }
 
@@ -221,8 +225,16 @@ export async function callTool(
           limit: z.number().optional(),
           offset: z.number().optional(),
         }, args);
-        // Member search always hits API (no local FTS for members)
-        const results = await searchMembers(apiKey, term, session_year, chamber, limit ?? 25, offset ?? 0);
+        // Local corpus first: chamber and session filter in SQL, rows carry
+        // fullName + chamber, and it works keyless (issue #17).
+        // session_year defaults to the current session, as the schema says.
+        // Unscoped, one legislator appears once per session served, which is
+        // the near-duplicate list the disambiguation rule cannot work from.
+        const year = session_year ?? currentSessionYear();
+        const local = await localSearchMembers(term, year, chamber, limit ?? 25, offset ?? 0);
+        const localResp = await localResponse(local);
+        if (localResp) return localResp;
+        const results = await searchMembers(apiKey, term, year, chamber, limit ?? 25, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 

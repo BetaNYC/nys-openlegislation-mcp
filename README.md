@@ -30,7 +30,7 @@ Built by [BetaNYC](https://beta.nyc) as part of a suite of civic data MCP server
 2. You'll receive an API key by email
 3. Set it as `NYS_LEGISLATION_API_KEY` (e.g. `export NYS_LEGISLATION_API_KEY="your-api-key"`), or pass it in your MCP client's `env` block — see [Installation](#installation)
 
-**Without a key**, the server still starts as long as a [local corpus](#local-corpus-optional) exists, and serves it in local-only mode. Results are labelled with the corpus sync date and a note saying what refreshes them. The 6 tools with no local coverage (`get_bill_votes`, `get_bill_updates`, `search_members`, `get_committee_meetings`, `get_updates`, `search`) return a message naming the key rather than failing opaquely, and a lookup that finds nothing in the corpus says so explicitly — offline, "not in the corpus" and "does not exist" are not the same claim.
+**Without a key**, the server still starts as long as a [local corpus](#local-corpus-optional) exists, and serves it in local-only mode. Results are labelled with the corpus sync date and a note saying what refreshes them. The 5 tools with no local coverage (`get_bill_votes`, `get_bill_updates`, `get_committee_meetings`, `get_updates`, `search`) return a message naming the key rather than failing opaquely, and a lookup that finds nothing in the corpus says so explicitly — offline, "not in the corpus" and "does not exist" are not the same claim.
 
 The server refuses to start only when **both** the key and the corpus are missing.
 
@@ -153,6 +153,7 @@ Law section text and transcript full text fall back to the API unless `--include
 
 - **Committees go stale between full fetches.** The incremental sync consumes the aggregate updates feed, which only carries `AGENDA` / `BILL` / `CALENDAR` / `LAW` content types — committee changes never appear in it. Re-run `fetch-data.js --types=committees` periodically (it is a quick fetch) to refresh committee data.
 - **Law and transcript text** are not incrementally synced; re-run `fetch-data.js` for those periodically.
+- **Member full names** come from bill sponsor records already in the corpus, filled in by `npm run sync` and `fetch-data.js` (no extra API calls). A corpus built before this change gains the `members.full_name` column on its next sync. A member who has never prime-sponsored a bill in the corpus has no full name locally.
 
 ---
 
@@ -168,10 +169,10 @@ nothing in the response would signal it.
 
 | Tool | Description |
 |---|---|
-| `search_bills` | Full-text bill search with ElasticSearch syntax, optional session year filter |
+| `search_bills` | Full-text bill search with ElasticSearch syntax, optional session year filter (omit it to search all sessions; all sessions in the local corpus, when it answers) |
 | `get_bill` | Get a specific bill by print number (e.g. `S1234`) and session year |
 | `list_bills` | List bills introduced in a session year |
-| `get_bill_votes` | Get committee and floor vote records for a bill |
+| `get_bill_votes` | Get committee and floor vote records for a bill (the `votes` block of the bill record) |
 | `get_bill_updates` | Feed of bill changes within a date range |
 
 ### Laws
@@ -187,8 +188,8 @@ nothing in the response would signal it.
 | Tool | Description |
 |---|---|
 | `list_members` | List Senate or Assembly members for a session year |
-| `get_member` | Get a specific legislator by member ID |
-| `search_members` | Search legislators by name |
+| `get_member` | Get a specific legislator by member ID; errors if the member sits in the other chamber from `chamber` |
+| `search_members` | Search legislators by name; every row carries `chamber`, and `fullName` where known (a locally served member who has never prime-sponsored a bill has none). Defaults to the current session. Served from the local corpus when present (works without a key) |
 
 ### Committees
 

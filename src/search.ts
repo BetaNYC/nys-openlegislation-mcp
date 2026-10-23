@@ -1,5 +1,6 @@
 import { apiFetch, buildUrl, type ApiKey, type PaginatedResult } from "./api.js";
 import { billSearchPath } from "./bills.js";
+import { withNysenateUrl } from "./laws.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -88,5 +89,15 @@ export async function search(
     contentType === "bills" ? billSearchPath(sessionYear) : `/${contentType}/search`;
 
   const url = buildUrl(path, apiKey, { term, limit, offset });
-  return apiFetch<PaginatedResult<SearchResult>>(url);
+  const results = await apiFetch<PaginatedResult<SearchResult>>(url);
+  if (contentType !== "laws") return results;
+  // Law hits get the same verified-or-null citation link as get_law_section (issue #18).
+  return {
+    ...results,
+    items: results.items.map((item) =>
+      item.result && typeof item.result === "object"
+        ? { ...item, result: withNysenateUrl(item.result) }
+        : item
+    ),
+  };
 }

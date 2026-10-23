@@ -8,6 +8,11 @@ import {
 import { TOOLS } from "./tools.js";
 import { callTool } from "./handlers.js";
 import { hasLocalCorpus, getDbPath } from "./db.js";
+import { createRequire } from "node:module";
+
+// Read from package.json so serverInfo cannot drift from the published version
+// (2.4.0 shipped reporting 2.3.0). package.json is always in the npm tarball.
+const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
 
 // ─── Data sources ─────────────────────────────────────────────────────────────
 //
@@ -49,7 +54,7 @@ console.error(
 // ─── Server ───────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "nys-openlegislation-mcp", version: "2.3.0" },
+  { name: "nys-openlegislation-mcp", version },
   { capabilities: { tools: {} } }
 );
 

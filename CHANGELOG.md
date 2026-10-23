@@ -5,6 +5,37 @@ All notable changes to `@betanyc/nys-openlegislation-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-10-22
+
+### Added
+
+- **`nysenate_url` on law documents**
+  ([#18](https://github.com/BetaNYC/nys-openlegislation-mcp/issues/18)).
+  `get_law_section` records and `search` results of `type: "laws"` carry a
+  citation link for `SECTION` and `ARTICLE` documents, and `null` for any
+  other type, so callers never have to build one from a pattern.
+- **Live API responses keep `total`, `offsetStart`, `offsetEnd` and `limit`.**
+  They sit on the API envelope, beside `result`, and were being dropped, so a
+  caller could not tell a full page from the last one. Results served from the
+  local corpus do not carry them yet.
+
+### Fixed
+
+- **`serverInfo` reports the real version.** 2.4.0 still said 2.3.0; the
+  version is now read from `package.json`.
+
+### Changed
+
+- **`src/db.ts` rewritten around three helpers**
+  ([#19](https://github.com/BetaNYC/nys-openlegislation-mcp/issues/19)),
+  468 → 266 lines, with a new test pinning every local query's behavior. No
+  change to what any local-corpus query returns. `getDbPath`, `hasLocalCorpus` and
+  `getSyncState` are kept: they have callers.
+- `get_bill_updates` now uses the same code as `get_updates` with
+  `content_type: "bills"`; the duplicate `getBillUpdates` is gone (#19).
+- Removed `getBill`'s unused `fullText` parameter, which requested the
+  no-full-text view when set to true (#19).
+
 ## [2.4.0] - 2026-10-11
 
 ### Fixed

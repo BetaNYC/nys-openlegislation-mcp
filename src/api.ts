@@ -22,14 +22,23 @@ export type ApiEnvelope<T> = {
   message: string;
   responseType: string;
   result: T;
+  // Present on list/search responses only. They sit on the envelope, beside
+  // `result`, not inside it — see the "Response" example under "Get a listing
+  // of laws": https://legislation.nysenate.gov/static/docs/html/laws.html
+  total?: number;
+  offsetStart?: number;
+  offsetEnd?: number;
+  limit?: number;
 };
 
 export type PaginatedResult<T> = {
   items: T[];
-  total: number;
-  limit: number;
-  offset: number;
   size: number;
+  /** Copied up from the envelope by `apiFetch`, so a caller can tell a full page from the last one. */
+  total?: number;
+  offsetStart?: number;
+  offsetEnd?: number;
+  limit?: number;
 };
 
 // ─── Keyless (local-only) mode ────────────────────────────────────────────────
@@ -100,6 +109,12 @@ export async function apiFetch<T>(url: string): Promise<T> {
   const data = (await res.json()) as ApiEnvelope<T>;
   if (!data.success) {
     throw new Error(`API returned failure: ${data.message}`);
+  }
+  // Paginated responses carry their totals on the envelope; returning only
+  // `result` used to drop them, so a caller saw 25 items and no hint of 600 more.
+  if (typeof data.total === "number" && data.result && typeof data.result === "object" && !Array.isArray(data.result)) {
+    const { total, offsetStart, offsetEnd, limit } = data;
+    return { ...data.result, total, offsetStart, offsetEnd, limit };
   }
   return data.result;
 }

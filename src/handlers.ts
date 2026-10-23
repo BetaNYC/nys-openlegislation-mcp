@@ -19,9 +19,8 @@ import {
   searchBills,
   listBills,
   getBillVotes,
-  getBillUpdates,
 } from "./bills.js";
-import { listLaws, getLawTree, getLawSection } from "./laws.js";
+import { listLaws, getLawTree, getLawSection, withNysenateUrl } from "./laws.js";
 import { listMembers, getMember, searchMembers } from "./members.js";
 import {
   listCommittees,
@@ -150,8 +149,9 @@ export async function callTool(
           limit: z.number().max(500).optional(),
           offset: z.number().optional(),
         }, args);
-        // Updates always fetched live by design
-        const results = await getBillUpdates(apiKey, from, to, limit ?? 50, offset ?? 0);
+        // Updates always fetched live by design. Same route as get_updates
+        // with content_type "bills" (issue #19 merged the duplicate).
+        const results = await getUpdates(apiKey, from, to, undefined, "bills", limit ?? 50, offset ?? 0);
         return { content: [{ type: "text", text: withDisclaimer(results) }] };
       }
 
@@ -179,7 +179,7 @@ export async function callTool(
       case "get_law_section": {
         const { law_id, location_id } = parseArgs(name, { law_id: z.string(), location_id: z.string() }, args);
         const local = await localGetLawSection(law_id, location_id);
-        const localResp = await localResponse(local);
+        const localResp = await localResponse(local && withNysenateUrl(local));
         if (localResp) return localResp;
         const result = await getLawSection(apiKey, law_id.toUpperCase(), location_id);
         return { content: [{ type: "text", text: withDisclaimer(result) }] };

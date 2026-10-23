@@ -156,7 +156,9 @@ export const TOOLS: Tool[] = [
     name: "get_law_section",
     description:
       "Get the text of a specific section within an NYS law body. " +
-      "Use get_law_tree to find the location ID for the section you need.",
+      "Use get_law_tree to find the location ID for the section you need. " +
+      "The record's nysenate_url is a verified citation link for SECTION and ARTICLE " +
+      "documents and null for other types: cite it when present, never build one by hand.",
     inputSchema: {
       additionalProperties: false,
       type: "object",
@@ -534,7 +536,8 @@ export const TOOLS: Tool[] = [
       "so this tool searches a single type per call (defaults to bills). " +
       "Supported types: bills, laws, agendas, calendars, transcripts, hearings. " +
       "Supports boolean operators (AND, OR, NOT), phrase quotes, wildcards, and field targeting. " +
-      "To search resolutions, use type 'bills' (they share the bills index).",
+      "To search resolutions, use type 'bills' (they share the bills index). " +
+      "Results of type laws carry nysenate_url (SECTION and ARTICLE only, otherwise null).",
     inputSchema: {
       additionalProperties: false,
       type: "object",

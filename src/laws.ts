@@ -52,6 +52,30 @@ export type LawDocument = {
   lawId2: string;
 };
 
+// ─── Citation links (issue #18) ───────────────────────────────────────────────
+
+/**
+ * Doc types whose nysenate.gov URL shape was confirmed in a browser on
+ * 2026-08-02: https://www.nysenate.gov/legislation/laws/{lawId}/{locationId},
+ * e.g. EDN/6233, PBO/86, STT/103 (SECTION) and EDN/A125 (ARTICLE).
+ * CHAPTER and TITLE were not checked, so they get null rather than a guess.
+ * Don't "fix" that by adding them here without opening one in a browser:
+ * www.nysenate.gov returns 403 to curl, so a command-line check proves nothing.
+ */
+const LINKABLE_DOC_TYPES = new Set(["SECTION", "ARTICLE"]);
+
+/** A link a person can open, or null when this server cannot vouch for one. */
+export function nysenateLawUrl(doc: { lawId?: unknown; locationId?: unknown; docType?: unknown }): string | null {
+  const { lawId, locationId, docType } = doc;
+  if (typeof lawId !== "string" || typeof locationId !== "string" || typeof docType !== "string") return null;
+  if (!LINKABLE_DOC_TYPES.has(docType)) return null;
+  return `https://www.nysenate.gov/legislation/laws/${encodeURIComponent(lawId)}/${encodeURIComponent(locationId)}`;
+}
+
+export function withNysenateUrl<T extends object>(doc: T): T & { nysenate_url: string | null } {
+  return { ...doc, nysenate_url: nysenateLawUrl(doc) };
+}
+
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function listLaws(
@@ -73,7 +97,7 @@ export async function getLawSection(
   apiKey: ApiKey,
   lawId: string,
   locationId: string
-): Promise<LawDocument> {
+): Promise<LawDocument & { nysenate_url: string | null }> {
   const url = buildUrl(`/laws/${lawId}/${locationId}`, apiKey);
-  return apiFetch<LawDocument>(url);
+  return withNysenateUrl(await apiFetch<LawDocument>(url));
 }

@@ -154,6 +154,7 @@ Law section text and transcript full text fall back to the API unless `--include
 - **Committees go stale between full fetches.** The incremental sync consumes the aggregate updates feed, which only carries `AGENDA` / `BILL` / `CALENDAR` / `LAW` content types — committee changes never appear in it. Re-run `fetch-data.js --types=committees` periodically (it is a quick fetch) to refresh committee data.
 - **Law and transcript text** are not incrementally synced; re-run `fetch-data.js` for those periodically.
 - **Member full names** come from bill sponsor records already in the corpus, filled in by `npm run sync` and `fetch-data.js` (no extra API calls). A corpus built before this change gains the `members.full_name` column on its next sync. A member who has never prime-sponsored a bill in the corpus has no full name locally.
+- **Local results carry no `total`.** Paginated results served from the local corpus return `items` and `size` only; the `total`, `offsetStart`, `offsetEnd` and `limit` fields come from the live API.
 
 ---
 
@@ -182,6 +183,16 @@ nothing in the response would signal it.
 | `list_laws` | List all NYS law bodies (Education Law, Labor Law, etc.) |
 | `get_law_tree` | Get table of contents for a law body |
 | `get_law_section` | Get text of a specific law section |
+
+**Citation links.** Law records from `get_law_section`, and `search` results of
+`type: "laws"`, carry a `nysenate_url` field: a link a person can open on
+nysenate.gov. It is populated **only for `SECTION` and `ARTICLE` documents**,
+the two shapes checked in a browser on 2026-08-02 (`…/laws/EDN/6233`, `…/laws/EDN/A125`).
+It is `null` for every other type, including `CHAPTER` and `TITLE`, because
+their URL shape has not been verified, and a wrong link is worse than none. If
+the field is populated, use it. If it is null, cite the law and section in
+plain text. Note that `www.nysenate.gov` returns 403 to `curl`, so check a
+new doc type in a browser before adding it.
 
 ### Members
 

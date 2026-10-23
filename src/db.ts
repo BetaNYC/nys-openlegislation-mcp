@@ -48,184 +48,117 @@ export function hasLocalCorpus(): boolean {
   return existsSync(DB_PATH);
 }
 
-// ─── Sync state ───────────────────────────────────────────────────────────────
+// ─── Query helpers ────────────────────────────────────────────────────────────
+//
+// Every local* lookup is "open the db, run one statement, parse raw_json, and
+// return null on any failure so the caller falls through to the live API".
+// These three carry that once (issue #19).
 
-export async function getSyncState(): Promise<Record<string, string> | null> {
+type Row = Record<string, any>;
+type Rows = { items: Record<string, unknown>[]; size: number };
+
+/** Run `fn` against the corpus; null when there is no corpus or it throws. */
+async function query<T>(fn: (db: any) => T): Promise<T | null> {
   const db = await getDb();
   if (!db) return null;
   try {
-    const rows = (db as any).prepare("SELECT key, value FROM sync_state").all() as Array<{key: string; value: string}>;
-    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    return fn(db);
   } catch {
     return null;
   }
+}
+
+/** First row's parsed raw_json, or null. Rows with has_text=0 count as absent. */
+function one(sql: string, ...params: unknown[]): Promise<Record<string, unknown> | null> {
+  return query((db) => {
+    const row = db.prepare(sql).get(...params) as Row | undefined;
+    if (!row || ("has_text" in row && !row.has_text)) return null;
+    return JSON.parse(row.raw_json);
+  });
+}
+
+/** Every row's parsed raw_json, as `{ items, size }`. */
+function many(sql: string, ...params: unknown[]): Promise<Rows | null> {
+  return query((db) => {
+    const items = (db.prepare(sql).all(...params) as Row[]).map((r) => JSON.parse(r.raw_json));
+    return { items, size: items.length };
+  });
+}
+
+// ─── Sync state ───────────────────────────────────────────────────────────────
+
+export function getSyncState(): Promise<Record<string, string> | null> {
+  return query((db) => {
+    const rows = db.prepare("SELECT key, value FROM sync_state").all() as Array<{ key: string; value: string }>;
+    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  });
 }
 
 // ─── Bills ────────────────────────────────────────────────────────────────────
 
-export async function localGetBill(
-  sessionYear: number,
-  printNo: string
-): Promise<Record<string, unknown> | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const row = (db as any)
-      .prepare("SELECT raw_json FROM bills WHERE session_year=? AND print_no=? LIMIT 1")
-      .get(sessionYear, printNo.toUpperCase()) as { raw_json: string } | undefined;
-    return row ? JSON.parse(row.raw_json) : null;
-  } catch {
-    return null;
-  }
+export function localGetBill(sessionYear: number, printNo: string) {
+  return one("SELECT raw_json FROM bills WHERE session_year=? AND print_no=? LIMIT 1", sessionYear, printNo.toUpperCase());
 }
 
-export async function localSearchBills(
+export function localSearchBills(
   term: string,
   sessionYear?: number,
   limit = 25,
   offset = 0
-): Promise<{ items: Record<string, unknown>[]; size: number } | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    let sql: string;
-    let params: unknown[];
-    if (sessionYear) {
-      sql = `
-        SELECT b.raw_json, bfts.rank
-        FROM bills_fts bfts
-        JOIN bills b ON b.rowid = bfts.rowid
-        WHERE bills_fts MATCH ? AND b.session_year = ?
-        ORDER BY bfts.rank
-        LIMIT ? OFFSET ?
-      `;
-      params = [term, sessionYear, limit, offset];
-    } else {
-      sql = `
-        SELECT b.raw_json, bfts.rank
-        FROM bills_fts bfts
-        JOIN bills b ON b.rowid = bfts.rowid
-        WHERE bills_fts MATCH ?
-        ORDER BY bfts.rank
-        LIMIT ? OFFSET ?
-      `;
-      params = [term, limit, offset];
-    }
-    const rows = (db as any).prepare(sql).all(...params) as Array<{ raw_json: string; rank: number }>;
+): Promise<Rows | null> {
+  return query((db) => {
+    const rows = db
+      .prepare(
+        `SELECT b.raw_json, bfts.rank
+         FROM bills_fts bfts
+         JOIN bills b ON b.rowid = bfts.rowid
+         WHERE bills_fts MATCH ?${sessionYear ? " AND b.session_year = ?" : ""}
+         ORDER BY bfts.rank
+         LIMIT ? OFFSET ?`
+      )
+      .all(term, ...(sessionYear ? [sessionYear] : []), limit, offset) as Array<{ raw_json: string; rank: number }>;
     const items = rows.map((r) => ({ result: JSON.parse(r.raw_json), rank: r.rank }));
     return { items, size: items.length };
-  } catch {
-    return null;
-  }
+  });
 }
 
-export async function localListBills(
-  sessionYear: number,
-  limit = 25,
-  offset = 0
-): Promise<{ items: Record<string, unknown>[]; size: number } | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const rows = (db as any)
-      .prepare("SELECT raw_json FROM bills WHERE session_year=? ORDER BY published_date DESC LIMIT ? OFFSET ?")
-      .all(sessionYear, limit, offset) as Array<{ raw_json: string }>;
-    const items = rows.map((r) => JSON.parse(r.raw_json));
-    return { items, size: items.length };
-  } catch {
-    return null;
-  }
+export function localListBills(sessionYear: number, limit = 25, offset = 0) {
+  return many("SELECT raw_json FROM bills WHERE session_year=? ORDER BY published_date DESC LIMIT ? OFFSET ?", sessionYear, limit, offset);
 }
 
 // ─── Laws ─────────────────────────────────────────────────────────────────────
 
 export async function localListLaws(): Promise<Record<string, unknown>[] | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const rows = (db as any)
-      .prepare("SELECT raw_json FROM law_trees ORDER BY law_id")
-      .all() as Array<{ raw_json: string }>;
-    return rows.map((r) => JSON.parse(r.raw_json));
-  } catch {
-    return null;
-  }
+  return (await many("SELECT raw_json FROM law_trees ORDER BY law_id"))?.items ?? null;
 }
 
-export async function localGetLawTree(lawId: string): Promise<Record<string, unknown> | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    // raw_json in law_trees holds the law *list item* (id/name/type), not the
-    // document tree — returning it here used to serve a stub instead of the
-    // actual table of contents. The real tree lives in tree_json (populated by
-    // fetch-data.js since 2026-07). If it's absent (older corpus or column
-    // missing), return null so the server falls through to the live API.
-    const row = (db as any)
-      .prepare("SELECT tree_json FROM law_trees WHERE law_id=? LIMIT 1")
-      .get(lawId.toUpperCase()) as { tree_json: string | null } | undefined;
+export function localGetLawTree(lawId: string): Promise<Record<string, unknown> | null> {
+  // raw_json in law_trees holds the law *list item* (id/name/type), not the
+  // document tree — returning it here used to serve a stub instead of the
+  // actual table of contents. The real tree lives in tree_json (populated by
+  // fetch-data.js since 2026-07). If it's absent (older corpus or column
+  // missing), return null so the server falls through to the live API.
+  return query((db) => {
+    const row = db.prepare("SELECT tree_json FROM law_trees WHERE law_id=? LIMIT 1").get(lawId.toUpperCase()) as
+      | { tree_json: string | null }
+      | undefined;
     return row?.tree_json ? JSON.parse(row.tree_json) : null;
-  } catch {
-    // Older corpora have no tree_json column — fall through to the live API.
-    return null;
-  }
+  });
 }
 
-export async function localGetLawSection(
-  lawId: string,
-  locationId: string
-): Promise<Record<string, unknown> | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const row = (db as any)
-      .prepare("SELECT raw_json, has_text FROM law_sections WHERE law_id=? AND location_id=? LIMIT 1")
-      .get(lawId.toUpperCase(), locationId) as { raw_json: string; has_text: number } | undefined;
-    if (!row) return null;
-    // If text was not fetched (--include-law-text not used), return null to trigger API fallback for text
-    if (!row.has_text) return null;
-    return JSON.parse(row.raw_json);
-  } catch {
-    return null;
-  }
+export function localGetLawSection(lawId: string, locationId: string) {
+  // has_text=0 (synced without --include-law-text) → null, so the text comes from the API.
+  return one("SELECT raw_json, has_text FROM law_sections WHERE law_id=? AND location_id=? LIMIT 1", lawId.toUpperCase(), locationId);
 }
 
 // ─── Members ──────────────────────────────────────────────────────────────────
 
-export async function localListMembers(
-  sessionYear: number,
-  chamber: string,
-  limit = 100,
-  offset = 0
-): Promise<{ items: Record<string, unknown>[]; size: number } | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const rows = (db as any)
-      .prepare("SELECT raw_json FROM members WHERE session_year=? AND chamber=? ORDER BY short_name LIMIT ? OFFSET ?")
-      .all(sessionYear, chamber.toUpperCase(), limit, offset) as Array<{ raw_json: string }>;
-    const items = rows.map((r) => JSON.parse(r.raw_json));
-    return { items, size: items.length };
-  } catch {
-    return null;
-  }
+export function localListMembers(sessionYear: number, chamber: string, limit = 100, offset = 0) {
+  return many("SELECT raw_json FROM members WHERE session_year=? AND chamber=? ORDER BY short_name LIMIT ? OFFSET ?", sessionYear, chamber.toUpperCase(), limit, offset);
 }
 
-export async function localGetMember(
-  sessionYear: number,
-  chamber: string,
-  memberId: number
-): Promise<Record<string, unknown> | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const row = (db as any)
-      .prepare("SELECT raw_json FROM members WHERE session_year=? AND chamber=? AND member_id=? LIMIT 1")
-      .get(sessionYear, chamber.toUpperCase(), memberId) as { raw_json: string } | undefined;
-    return row ? JSON.parse(row.raw_json) : null;
-  } catch {
-    return null;
-  }
+export function localGetMember(sessionYear: number, chamber: string, memberId: number) {
+  return one("SELECT raw_json FROM members WHERE session_year=? AND chamber=? AND member_id=? LIMIT 1", sessionYear, chamber.toUpperCase(), memberId);
 }
 
 /**
@@ -241,17 +174,15 @@ export async function localGetMember(
  * This is NOT ElasticSearch: a field query such as `districtCode:20` matches
  * nothing here and, with an API key, falls through to the live search.
  */
-export async function localSearchMembers(
+export function localSearchMembers(
   term: string,
   sessionYear?: number,
   chamber?: string,
   limit = 25,
   offset = 0
-): Promise<{ items: Record<string, unknown>[]; size: number } | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const cols = ((db as any).prepare("PRAGMA table_info(members)").all() as Array<{ name: string }>)
+): Promise<Rows | null> {
+  return query((db) => {
+    const cols = (db.prepare("PRAGMA table_info(members)").all() as Array<{ name: string }>)
       .map((c) => c.name);
     const hasFullName = cols.includes("full_name");
     // Escape LIKE wildcards so a literal % or _ in a name is matched literally.
@@ -270,7 +201,7 @@ export async function localSearchMembers(
       where.push("chamber = ?");
       params.push(chamber.toUpperCase());
     }
-    const rows = (db as any)
+    const rows = db
       .prepare(
         `SELECT raw_json, chamber, ${hasFullName ? "full_name" : "NULL AS full_name"}
          FROM members WHERE ${where.join(" AND ")}
@@ -282,187 +213,54 @@ export async function localSearchMembers(
       return { ...m, chamber: r.chamber, fullName: r.full_name ?? m.fullName ?? null };
     });
     return { items, size: items.length };
-  } catch {
-    return null;
-  }
+  });
 }
 
 // ─── Committees ───────────────────────────────────────────────────────────────
 
-export async function localListCommittees(
-  sessionYear: number,
-  chamber: string,
-  limit = 100,
-  offset = 0
-): Promise<{ items: Record<string, unknown>[]; size: number } | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const rows = (db as any)
-      .prepare("SELECT raw_json FROM committees WHERE session_year=? AND chamber=? ORDER BY name LIMIT ? OFFSET ?")
-      .all(sessionYear, chamber.toUpperCase(), limit, offset) as Array<{ raw_json: string }>;
-    const items = rows.map((r) => JSON.parse(r.raw_json));
-    return { items, size: items.length };
-  } catch {
-    return null;
-  }
+export function localListCommittees(sessionYear: number, chamber: string, limit = 100, offset = 0) {
+  return many("SELECT raw_json FROM committees WHERE session_year=? AND chamber=? ORDER BY name LIMIT ? OFFSET ?", sessionYear, chamber.toUpperCase(), limit, offset);
 }
 
-export async function localGetCommittee(
-  sessionYear: number,
-  chamber: string,
-  name: string
-): Promise<Record<string, unknown> | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const row = (db as any)
-      .prepare("SELECT raw_json FROM committees WHERE session_year=? AND chamber=? AND name=? LIMIT 1")
-      .get(sessionYear, chamber.toUpperCase(), name) as { raw_json: string } | undefined;
-    return row ? JSON.parse(row.raw_json) : null;
-  } catch {
-    return null;
-  }
+export function localGetCommittee(sessionYear: number, chamber: string, name: string) {
+  return one("SELECT raw_json FROM committees WHERE session_year=? AND chamber=? AND name=? LIMIT 1", sessionYear, chamber.toUpperCase(), name);
 }
 
 // ─── Agendas ──────────────────────────────────────────────────────────────────
 
-export async function localListAgendas(
-  year: number,
-  limit = 50,
-  offset = 0
-): Promise<{ items: Record<string, unknown>[]; size: number } | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const rows = (db as any)
-      .prepare("SELECT raw_json FROM agendas WHERE year=? ORDER BY agenda_no DESC LIMIT ? OFFSET ?")
-      .all(year, limit, offset) as Array<{ raw_json: string }>;
-    const items = rows.map((r) => JSON.parse(r.raw_json));
-    return { items, size: items.length };
-  } catch {
-    return null;
-  }
+export function localListAgendas(year: number, limit = 50, offset = 0) {
+  return many("SELECT raw_json FROM agendas WHERE year=? ORDER BY agenda_no DESC LIMIT ? OFFSET ?", year, limit, offset);
 }
 
-export async function localGetAgenda(
-  year: number,
-  agendaNo: number
-): Promise<Record<string, unknown> | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const row = (db as any)
-      .prepare("SELECT raw_json FROM agendas WHERE year=? AND agenda_no=? LIMIT 1")
-      .get(year, agendaNo) as { raw_json: string } | undefined;
-    return row ? JSON.parse(row.raw_json) : null;
-  } catch {
-    return null;
-  }
+export function localGetAgenda(year: number, agendaNo: number) {
+  return one("SELECT raw_json FROM agendas WHERE year=? AND agenda_no=? LIMIT 1", year, agendaNo);
 }
 
 // ─── Calendars ────────────────────────────────────────────────────────────────
 
-export async function localListCalendars(
-  year: number,
-  limit = 50,
-  offset = 0
-): Promise<{ items: Record<string, unknown>[]; size: number } | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const rows = (db as any)
-      .prepare("SELECT raw_json FROM calendars WHERE year=? ORDER BY calendar_no DESC LIMIT ? OFFSET ?")
-      .all(year, limit, offset) as Array<{ raw_json: string }>;
-    const items = rows.map((r) => JSON.parse(r.raw_json));
-    return { items, size: items.length };
-  } catch {
-    return null;
-  }
+export function localListCalendars(year: number, limit = 50, offset = 0) {
+  return many("SELECT raw_json FROM calendars WHERE year=? ORDER BY calendar_no DESC LIMIT ? OFFSET ?", year, limit, offset);
 }
 
-export async function localGetCalendar(
-  year: number,
-  calendarNo: number
-): Promise<Record<string, unknown> | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const row = (db as any)
-      .prepare("SELECT raw_json FROM calendars WHERE year=? AND calendar_no=? LIMIT 1")
-      .get(year, calendarNo) as { raw_json: string } | undefined;
-    return row ? JSON.parse(row.raw_json) : null;
-  } catch {
-    return null;
-  }
+export function localGetCalendar(year: number, calendarNo: number) {
+  return one("SELECT raw_json FROM calendars WHERE year=? AND calendar_no=? LIMIT 1", year, calendarNo);
 }
 
 // ─── Transcripts ──────────────────────────────────────────────────────────────
+// Transcript rows synced without text (has_text=0) fall through to the API.
 
-export async function localListFloorTranscripts(
-  year: number,
-  limit = 50,
-  offset = 0
-): Promise<{ items: Record<string, unknown>[]; size: number } | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const rows = (db as any)
-      .prepare("SELECT raw_json FROM floor_transcripts WHERE year=? ORDER BY date_time DESC LIMIT ? OFFSET ?")
-      .all(year, limit, offset) as Array<{ raw_json: string }>;
-    const items = rows.map((r) => JSON.parse(r.raw_json));
-    return { items, size: items.length };
-  } catch {
-    return null;
-  }
+export function localListFloorTranscripts(year: number, limit = 50, offset = 0) {
+  return many("SELECT raw_json FROM floor_transcripts WHERE year=? ORDER BY date_time DESC LIMIT ? OFFSET ?", year, limit, offset);
 }
 
-export async function localGetFloorTranscript(
-  dateTime: string
-): Promise<Record<string, unknown> | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const row = (db as any)
-      .prepare("SELECT raw_json, has_text FROM floor_transcripts WHERE date_time=? LIMIT 1")
-      .get(dateTime) as { raw_json: string; has_text: number } | undefined;
-    if (!row || !row.has_text) return null;
-    return JSON.parse(row.raw_json);
-  } catch {
-    return null;
-  }
+export function localGetFloorTranscript(dateTime: string) {
+  return one("SELECT raw_json, has_text FROM floor_transcripts WHERE date_time=? LIMIT 1", dateTime);
 }
 
-export async function localListHearingTranscripts(
-  year: number,
-  limit = 50,
-  offset = 0
-): Promise<{ items: Record<string, unknown>[]; size: number } | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const rows = (db as any)
-      .prepare("SELECT raw_json FROM hearing_transcripts WHERE year=? ORDER BY date DESC LIMIT ? OFFSET ?")
-      .all(year, limit, offset) as Array<{ raw_json: string }>;
-    const items = rows.map((r) => JSON.parse(r.raw_json));
-    return { items, size: items.length };
-  } catch {
-    return null;
-  }
+export function localListHearingTranscripts(year: number, limit = 50, offset = 0) {
+  return many("SELECT raw_json FROM hearing_transcripts WHERE year=? ORDER BY date DESC LIMIT ? OFFSET ?", year, limit, offset);
 }
 
-export async function localGetHearingTranscript(
-  filename: string
-): Promise<Record<string, unknown> | null> {
-  const db = await getDb();
-  if (!db) return null;
-  try {
-    const row = (db as any)
-      .prepare("SELECT raw_json, has_text FROM hearing_transcripts WHERE filename=? LIMIT 1")
-      .get(filename) as { raw_json: string; has_text: number } | undefined;
-    if (!row || !row.has_text) return null;
-    return JSON.parse(row.raw_json);
-  } catch {
-    return null;
-  }
+export function localGetHearingTranscript(filename: string) {
+  return one("SELECT raw_json, has_text FROM hearing_transcripts WHERE filename=? LIMIT 1", filename);
 }

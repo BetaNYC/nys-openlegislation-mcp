@@ -74,19 +74,6 @@ export type Bill = {
   programInfo: unknown;
 };
 
-export type BillUpdate = {
-  id: {
-    basePrintNo: string;
-    session: number;
-  };
-  contentType: string;
-  lastFragment: {
-    type: string;
-    text: string;
-    date: string;
-  };
-};
-
 // ─── API functions ────────────────────────────────────────────────────────────
 
 /** Bill search route, scoped to one session year when given (issue #21). */
@@ -97,12 +84,9 @@ export function billSearchPath(sessionYear?: number): string {
 export async function getBill(
   apiKey: ApiKey,
   sessionYear: number,
-  printNo: string,
-  fullText = false
+  printNo: string
 ): Promise<Bill & { url: string }> {
-  const url = buildUrl(`/bills/${sessionYear}/${printNo}`, apiKey, {
-    ...(fullText ? { view: "with_refs_no_fulltext" } : {}),
-  });
+  const url = buildUrl(`/bills/${sessionYear}/${printNo}`, apiKey);
   const bill = await apiFetch<Bill>(url);
   return withBillUrl(bill, sessionYear);
 }
@@ -159,19 +143,4 @@ export async function getBillVotes(
   const bill = await apiFetch<Bill>(url);
   // The docs say votes appear "if there are any"; normalize absence to empty.
   return bill.votes ?? { items: [], size: 0 };
-}
-
-export async function getBillUpdates(
-  apiKey: ApiKey,
-  from: string,
-  to: string,
-  limit = 50,
-  offset = 0
-): Promise<PaginatedResult<BillUpdate>> {
-  const url = buildUrl(`/bills/updates/${from}/${to}`, apiKey, {
-    limit,
-    offset,
-    order: "desc",
-  });
-  return apiFetch<PaginatedResult<BillUpdate>>(url);
 }

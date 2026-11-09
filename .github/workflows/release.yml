@@ -6,8 +6,10 @@ name: Release
 #
 # Release flow: bump `version` in package.json via a normal PR → merge to main
 # → push a tag `v<version>` (e.g. `v2.0.1`) → this workflow runs the test
-# suite, verifies the tag matches package.json, publishes to npm with
-# provenance, and creates a GitHub Release with auto-generated notes.
+# suite, verifies server.json and the tag match package.json, publishes to npm
+# with provenance, and creates a GitHub Release with auto-generated notes.
+# A successful run then triggers publish-mcp.yml, which lists the version in
+# the official MCP Registry.
 #
 # Requirements:
 #   - `NPM_TOKEN` org secret with publish rights to @betanyc on npm.
@@ -39,6 +41,13 @@ jobs:
         run: npm ci
       - name: Test
         run: npm test --if-present
+      - name: Verify server.json versions match package.json
+        run: |
+          node -e '
+            const p = require("./package.json"), s = require("./server.json");
+            const bad = [s.version, ...s.packages.map((x) => x.version)].filter((v) => v !== p.version);
+            if (bad.length || s.name !== p.mcpName) { console.error("server.json is out of step with package.json"); process.exit(1); }
+          '
       - name: Verify tag matches package.json version
         run: |
           PKG_VERSION="$(node -p "require('./package.json').version")"

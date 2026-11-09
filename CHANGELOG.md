@@ -5,6 +5,22 @@ All notable changes to `@betanyc/nys-openlegislation-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - unreleased
+
+### Added
+
+- **Listing in the official MCP Registry** as
+  `io.github.BetaNYC/nys-openlegislation-mcp`. `package.json` now carries
+  `mcpName`, which the registry checks on the published npm package, so this
+  release exists to ship it. `server.json` describes the listing, and
+  `.github/workflows/publish-mcp.yml` publishes it after a successful Release.
+- **`glama.json`**, which claims the server on Glama for its maintainers.
+
+### Changed
+
+- The Release workflow checks that `server.json` and `package.json` agree on
+  name and version before publishing to npm.
+
 ## [2.5.0] - 2026-10-22
 
 ### Added

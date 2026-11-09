@@ -286,6 +286,7 @@ Releases are automated by [`.github/workflows/release.yml`](.github/workflows/re
 1. Bump `version` in `package.json` in a PR (with a matching `CHANGELOG.md` entry) and merge to main.
 2. Tag the merge commit `v<version>` (e.g. `git tag v2.0.1 && git push origin v2.0.1`).
 3. The workflow runs the test suite, verifies the tag matches `package.json`, publishes to npm with provenance, and creates a GitHub Release with generated notes.
+4. A successful Release triggers [`.github/workflows/publish-mcp.yml`](.github/workflows/publish-mcp.yml), which lists that version in the [official MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.BetaNYC/nys-openlegislation-mcp` (from `server.json`; keep its versions in step with `package.json`).
 
 See [CHANGELOG.md](CHANGELOG.md) for version history. Publishing requires the `NPM_TOKEN` org secret (an npm token with publish rights to the `@betanyc` scope).
 

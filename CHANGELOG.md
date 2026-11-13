@@ -5,7 +5,36 @@ All notable changes to `@betanyc/nys-openlegislation-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.5.1] - unreleased
+## [2.6.0] - Unreleased
+
+Adds the two tools BetaNYC is adding to each of its MCP servers. Tracking:
+BetaNYC/betanyc-ai-workspace#1645 (epic #1637).
+
+### Added
+
+- `whats_changed`: what changed in this server, newest first, from
+  `WHATS-CHANGED.md` (filters: `since`, `tag`, `limit`). Answers with readable
+  text and `structuredContent` matching a declared `outputSchema`.
+- `about_betanyc`: who built the server, the repository, where to report a
+  problem, and BetaNYC's links.
+- `src/betanyc-tools.ts`, copied unchanged from the workspace's
+  `scripts/mcp_shared/betanyc-tools.ts` (shared module v1.2.1). Never edit the
+  copy; change the canonical file and copy it again. The two tools answer about
+  the server, not from Open Legislation data, so their text carries no data
+  disclaimer.
+- `WHATS-CHANGED.md`, the reader-facing record of changes, backfilled to 1.0.0
+  and shipped in the npm package (`files`). `scripts/whats_changed.py` (copied
+  unchanged from the workspace) checks it.
+- CI: a `whats-changed` job runs `whats_changed.py check --base-ref` (old
+  entries are append-only, and a version bump needs an entry). The release
+  workflow runs `check --release` before `npm publish`, so a release cannot ship
+  while the `WHATS-CHANGED.md` entry still says `Unreleased`.
+
+### Changed
+
+- 26 tools instead of 24.
+
+## [2.5.1] - 2026-11-09
 
 ### Added
 

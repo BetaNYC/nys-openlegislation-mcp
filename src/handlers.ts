@@ -13,7 +13,7 @@ import {
   MissingApiKeyError,
   type ApiKey,
 } from "./api.js";
-import { parseArgs } from "./tools.js";
+import { parseArgs, betanyc } from "./tools.js";
 import {
   getBill,
   searchBills,
@@ -69,6 +69,11 @@ export async function callTool(
   name: string,
   args: unknown
 ): Promise<CallToolResult> {
+  // whats_changed and about_betanyc (BetaNYC standard tools): they read this repo's
+  // WHATS-CHANGED.md and answer about the server, not from Open Legislation data, so they
+  // need no API key and carry no data disclaimer.
+  if (betanyc.handles(name)) return betanyc.call(name, args);
+
   /**
    * Wrap a local corpus result into a tool response, or return null to fall
    * through to the live API. Served results carry a

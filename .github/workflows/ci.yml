@@ -26,6 +26,9 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/ci.yml"
+      - "WHATS-CHANGED.md"
+      - "CHANGELOG.md"
+      - "scripts/whats_changed.py"
   push:
     branches: [main]
     paths:
@@ -34,6 +37,9 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/ci.yml"
+      - "WHATS-CHANGED.md"
+      - "CHANGELOG.md"
+      - "scripts/whats_changed.py"
 
 permissions:
   contents: read
@@ -60,3 +66,22 @@ jobs:
         run: npm ci
       - name: Build and test
         run: npm test
+
+  # BetaNYC's What's changed standard (betanyc-ai-workspace
+  # platform/system/whats-changed-standard.md § 10). scripts/whats_changed.py is a copy of the
+  # workspace's canonical file: never edit it here. `check --base-ref` needs the base
+  # branch's history (fetch-depth: 0): old entries are append-only, and a package.json
+  # version bump needs an MCP entry naming the new version. Stdlib only, so no pip install.
+  whats-changed:
+    name: What's changed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check WHATS-CHANGED.md
+        run: python3 scripts/whats_changed.py check WHATS-CHANGED.md --base-ref "origin/${{ github.base_ref || 'main' }}"

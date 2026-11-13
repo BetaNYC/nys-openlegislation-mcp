@@ -4,6 +4,8 @@ An MCP server for the [NYS Open Legislation API](https://legislation.nysenate.go
 
 Built by [BetaNYC](https://beta.nyc) as part of a suite of civic data MCP servers for New York.
 
+**[What's changed](WHATS-CHANGED.md):** new tools, corrections and other changes a reader would notice, newest first. Developer detail is in [CHANGELOG.md](CHANGELOG.md).
+
 ---
 
 ## What it covers
@@ -19,6 +21,7 @@ Built by [BetaNYC](https://beta.nyc) as part of a suite of civic data MCP server
 | **Transcripts** | Floor session and public hearing transcripts |
 | **Updates** | Aggregate change feed across all content types |
 | **Search** | Full-text ElasticSearch within a content type (bills, laws, agendas, calendars, transcripts, hearings) |
+| **About this server** | What changed in it, and who built it |
 
 ---
 
@@ -235,6 +238,15 @@ new doc type in a browser before adding it.
 | `get_updates` | Aggregate change feed for a date range. `type` selects the timestamp the range filters on (`processed` or `published`); `content_type` restricts to `bills`, `agendas`, `calendars`, or `laws` |
 | `search` | Full-text search within one content type — `bills` (default), `laws`, `agendas`, `calendars`, `transcripts`, `hearings`. One type per call; the upstream API has no unified search endpoint. Search resolutions via `type: "bills"`. |
 
+### About this server
+
+| Tool | Description |
+|---|---|
+| `whats_changed` | What changed in this server, newest first, from [WHATS-CHANGED.md](WHATS-CHANGED.md), which ships with the package: new tools and corrections, with what to re-check if you used an old answer. Optional `since` (`YYYY-MM-DD`), `tag` (`Site`, `Data`, `MCP` or `Correction`) and `limit` (1 to 50) |
+| `about_betanyc` | Who built the server (BetaNYC, a project of the Fund for the City of New York), its version and repository, where to report a bug in this server or ask for a new feature, and BetaNYC's links. No parameters |
+
+These two need no API key and never call the network. BetaNYC is adding them to each of its MCP servers; `src/betanyc-tools.ts` is a copy of the canonical file in BetaNYC's workspace, so never edit the copy.
+
 ---
 
 ## Example queries
@@ -283,10 +295,15 @@ This split exists because the previous arrangement gated the live test on the AP
 
 Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml):
 
-1. Bump `version` in `package.json` in a PR (with a matching `CHANGELOG.md` entry) and merge to main.
-2. Tag the merge commit `v<version>` (e.g. `git tag v2.0.1 && git push origin v2.0.1`).
-3. The workflow runs the test suite, verifies the tag matches `package.json`, publishes to npm with provenance, and creates a GitHub Release with generated notes.
-4. A successful Release triggers [`.github/workflows/publish-mcp.yml`](.github/workflows/publish-mcp.yml), which lists that version in the [official MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.BetaNYC/nys-openlegislation-mcp` (from `server.json`; keep its versions in step with `package.json`).
+1. Bump `version` in `package.json`, `package-lock.json` and `server.json` (both `version` fields) in a PR, with a `CHANGELOG.md` entry headed `## [X.Y.Z] - Unreleased`. For a release that changes what the server returns or which tools it has, add a [WHATS-CHANGED.md](WHATS-CHANGED.md) entry headed `## Unreleased: Title`, tagged MCP, whose MCP version line links to `CHANGELOG.md` with no anchor. CI's What's changed check fails a version bump without one; a metadata-only release instead carries a `No-whats-changed: <reason>` line in a commit message. Merge to main.
+2. On release day, one commit on `main`, with the New York date (`TZ=America/New_York date +%F`):
+   - `## Unreleased: Title` becomes `## YYYY-MM-DD: Title` in WHATS-CHANGED.md. The title must stay the same; the check rejects a changed one.
+   - `## [X.Y.Z] - Unreleased` becomes `## [X.Y.Z] - YYYY-MM-DD` in CHANGELOG.md.
+   - The entry's MCP version link gains the new CHANGELOG.md anchor. Compute it, never type it: `python3 -c "import sys; sys.path.insert(0, 'scripts'); import whats_changed as w; print(w.github_slug('[X.Y.Z] - YYYY-MM-DD'))"` (for `[2.6.0] - 2026-11-13` it prints `260---2026-11-13`).
+   - Check: `python3 scripts/whats_changed.py check WHATS-CHANGED.md --release` must pass. It is the same gate the workflow runs before `npm publish`.
+3. Tag that commit `v<version>` (e.g. `git tag v2.6.0 && git push origin v2.6.0`).
+4. The workflow runs the test suite, verifies the tag matches `package.json`, checks that no WHATS-CHANGED.md entry is left Unreleased, publishes to npm with provenance, and creates a GitHub Release with generated notes.
+5. A successful Release triggers [`.github/workflows/publish-mcp.yml`](.github/workflows/publish-mcp.yml), which lists that version in the [official MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.BetaNYC/nys-openlegislation-mcp` (from `server.json`; keep its versions in step with `package.json`).
 
 See [CHANGELOG.md](CHANGELOG.md) for version history. Publishing requires the `NPM_TOKEN` org secret (an npm token with publish rights to the `@betanyc` scope).
 

@@ -5,8 +5,11 @@ name: Release
 # (platform/system/engineering-standards.md in the main workspace).
 #
 # Release flow: bump `version` in package.json via a normal PR → merge to main
-# → push a tag `v<version>` (e.g. `v2.0.1`) → this workflow runs the test
-# suite, verifies server.json and the tag match package.json, publishes to npm
+# → on release day, one commit dates the WHATS-CHANGED.md "## Unreleased:" entry
+# and the CHANGELOG.md heading (README, "Releases") → push a tag `v<version>`
+# on that commit (e.g. `v2.0.1`) → this workflow runs the test
+# suite, verifies server.json and the tag match package.json, checks that no
+# WHATS-CHANGED.md entry is left Unreleased, publishes to npm
 # with provenance, and creates a GitHub Release with auto-generated notes.
 # A successful run then triggers publish-mcp.yml, which lists the version in
 # the official MCP Registry.
@@ -56,6 +59,12 @@ jobs:
                  "Bump the version in a PR, merge it, then tag the merge commit as v$PKG_VERSION."
             exit 1
           fi
+      # WHATS-CHANGED.md: the version bump's entry is "## Unreleased: Title" until the release
+      # commit dates it ("## YYYY-MM-DD: Title", same title). This fails while one is left, so a
+      # release cannot ship undated. scripts/whats_changed.py is a copy of the workspace's
+      # canonical file; never edit it here.
+      - name: WHATS-CHANGED.md has no Unreleased entry
+        run: python3 scripts/whats_changed.py check WHATS-CHANGED.md --release
       - name: Publish to npm (with provenance)
         run: npm publish --provenance --access public
         env:

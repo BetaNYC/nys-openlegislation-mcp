@@ -7,12 +7,12 @@ This page lists the changes to nys-openlegislation-mcp that a reader would notic
 
 To report a bug in this server or ask for a new feature, [open an issue on GitHub](https://github.com/BetaNYC/nys-openlegislation-mcp/issues).
 
-## Unreleased: Two tools that explain the server and list what changed
+## 2026-11-13: Two tools that explain the server and list what changed
 
 - **Tags:** MCP
 - **What changed:** Two new tools let your AI assistant answer "what changed in this server?" from this page, and "who built this?" with links to BetaNYC and to the place to report a bug in this server or ask for a new feature. This page is new too. It lists the changes a reader would notice, back to the first release.
-- **MCP version:** [nys-openlegislation-mcp 2.6.0](CHANGELOG.md)
-- **More detail:** [Release notes](CHANGELOG.md)
+- **MCP version:** [nys-openlegislation-mcp 2.6.0](CHANGELOG.md#260---2026-11-13)
+- **More detail:** [Release notes](CHANGELOG.md#260---2026-11-13)
 
 ## 2026-10-22: Links to law sections on the Senate's website, and result totals
 

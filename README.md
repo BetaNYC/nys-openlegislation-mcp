@@ -245,7 +245,7 @@ new doc type in a browser before adding it.
 | `whats_changed` | What changed in this server, newest first, from [WHATS-CHANGED.md](WHATS-CHANGED.md), which ships with the package: new tools and corrections, with what to re-check if you used an old answer. Optional `since` (`YYYY-MM-DD`), `tag` (`Site`, `Data`, `MCP` or `Correction`) and `limit` (1 to 50) |
 | `about_betanyc` | Who built the server (BetaNYC, a project of the Fund for the City of New York), its version and repository, where to report a problem, and BetaNYC's links. No parameters |
 
-These two need no API key and never call the network. Every BetaNYC MCP server carries them; `src/betanyc-tools.ts` is a copy of the canonical file in BetaNYC's workspace, so never edit the copy.
+These two need no API key and never call the network. BetaNYC is adding them to each of its MCP servers; `src/betanyc-tools.ts` is a copy of the canonical file in BetaNYC's workspace, so never edit the copy.
 
 ---
 

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.6.0] - Unreleased
 
-Adds the two tools every BetaNYC MCP server carries. Tracking:
+Adds the two tools BetaNYC is adding to each of its MCP servers. Tracking:
 BetaNYC/betanyc-ai-workspace#1645 (epic #1637).
 
 ### Added

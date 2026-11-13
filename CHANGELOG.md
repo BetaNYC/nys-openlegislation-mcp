@@ -18,7 +18,7 @@ BetaNYC/betanyc-ai-workspace#1645 (epic #1637).
 - `about_betanyc`: who built the server, the repository, where to report a
   problem, and BetaNYC's links.
 - `src/betanyc-tools.ts`, copied unchanged from the workspace's
-  `scripts/mcp_shared/betanyc-tools.ts` (shared module v1.2.0). Never edit the
+  `scripts/mcp_shared/betanyc-tools.ts` (shared module v1.2.1). Never edit the
   copy; change the canonical file and copy it again. The two tools answer about
   the server, not from Open Legislation data, so their text carries no data
   disclaimer.

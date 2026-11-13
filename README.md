@@ -297,7 +297,7 @@ Releases are automated by [`.github/workflows/release.yml`](.github/workflows/re
 
 1. Bump `version` in `package.json`, `package-lock.json` and `server.json` (both `version` fields) in a PR, with a `CHANGELOG.md` entry headed `## [X.Y.Z] - Unreleased`. For a release that changes what the server returns or which tools it has, add a [WHATS-CHANGED.md](WHATS-CHANGED.md) entry headed `## Unreleased: Title`, tagged MCP, whose MCP version line links to `CHANGELOG.md` with no anchor. CI's What's changed check fails a version bump without one; a metadata-only release instead carries a `No-whats-changed: <reason>` line in a commit message. Merge to main.
 2. On release day, one commit on `main`, with the New York date (`TZ=America/New_York date +%F`):
-   - `## Unreleased: Title` becomes `## YYYY-MM-DD: Title` in WHATS-CHANGED.md, same title.
+   - `## Unreleased: Title` becomes `## YYYY-MM-DD: Title` in WHATS-CHANGED.md. The title must stay the same; the check rejects a changed one.
    - `## [X.Y.Z] - Unreleased` becomes `## [X.Y.Z] - YYYY-MM-DD` in CHANGELOG.md.
    - The entry's MCP version link gains the new CHANGELOG.md anchor. Compute it, never type it: `python3 -c "import sys; sys.path.insert(0, 'scripts'); import whats_changed as w; print(w.github_slug('[X.Y.Z] - YYYY-MM-DD'))"` (for `[2.6.0] - 2026-11-13` it prints `260---2026-11-13`).
    - Check: `python3 scripts/whats_changed.py check WHATS-CHANGED.md --release` must pass. It is the same gate the workflow runs before `npm publish`.

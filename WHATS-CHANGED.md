@@ -5,12 +5,12 @@ This page lists the changes to nys-openlegislation-mcp that a reader would notic
 - **History begins:** 2026-05-21, the first release. Corrections made before this date may be missing.
 - **Data refresh:** The server asks the New York State Senate's Open Legislation API each time. If you keep a local copy of the data, it is as current as your last sync, and answers from it say when that was.
 
-To report a problem with this server or ask for a feature, [open an issue on GitHub](https://github.com/BetaNYC/nys-openlegislation-mcp/issues).
+To report a bug in this server or ask for a new feature, [open an issue on GitHub](https://github.com/BetaNYC/nys-openlegislation-mcp/issues).
 
 ## Unreleased: Two tools that explain the server and list what changed
 
 - **Tags:** MCP
-- **What changed:** Two new tools let your AI assistant answer "what changed in this server?" from this page, and "who built this?" with links to BetaNYC and to the place to report a problem with the server. This page is new too. It lists the changes a reader would notice, back to the first release.
+- **What changed:** Two new tools let your AI assistant answer "what changed in this server?" from this page, and "who built this?" with links to BetaNYC and to the place to report a bug in this server or ask for a new feature. This page is new too. It lists the changes a reader would notice, back to the first release.
 - **MCP version:** [nys-openlegislation-mcp 2.6.0](CHANGELOG.md)
 - **More detail:** [Release notes](CHANGELOG.md)
 

@@ -582,10 +582,8 @@ export const TOOLS: Tool[] = [
       required: ["term"],
     },
   },
-  // What changed in this server, and who built it (BetaNYC standard tools). The shared
-  // module types inputSchema loosely (Record<string, unknown>) so it needs no SDK import;
-  // each schema is a JSON Schema object with type "object", which is what Tool requires.
-  ...(betanyc.tools as Tool[]),
+  // What changed in this server, and who built it (BetaNYC standard tools).
+  ...betanyc.tools,
 ];
 
 /**

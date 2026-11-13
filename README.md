@@ -243,7 +243,7 @@ new doc type in a browser before adding it.
 | Tool | Description |
 |---|---|
 | `whats_changed` | What changed in this server, newest first, from [WHATS-CHANGED.md](WHATS-CHANGED.md), which ships with the package: new tools and corrections, with what to re-check if you used an old answer. Optional `since` (`YYYY-MM-DD`), `tag` (`Site`, `Data`, `MCP` or `Correction`) and `limit` (1 to 50) |
-| `about_betanyc` | Who built the server (BetaNYC, a project of the Fund for the City of New York), its version and repository, where to report a problem, and BetaNYC's links. No parameters |
+| `about_betanyc` | Who built the server (BetaNYC, a project of the Fund for the City of New York), its version and repository, where to report a bug in this server or ask for a new feature, and BetaNYC's links. No parameters |
 
 These two need no API key and never call the network. BetaNYC is adding them to each of its MCP servers; `src/betanyc-tools.ts` is a copy of the canonical file in BetaNYC's workspace, so never edit the copy.
 
@@ -300,7 +300,6 @@ Releases are automated by [`.github/workflows/release.yml`](.github/workflows/re
    - `## Unreleased: Title` becomes `## YYYY-MM-DD: Title` in WHATS-CHANGED.md, same title.
    - `## [X.Y.Z] - Unreleased` becomes `## [X.Y.Z] - YYYY-MM-DD` in CHANGELOG.md.
    - The entry's MCP version link gains the new CHANGELOG.md anchor. Compute it, never type it: `python3 -c "import sys; sys.path.insert(0, 'scripts'); import whats_changed as w; print(w.github_slug('[X.Y.Z] - YYYY-MM-DD'))"` (for `[2.6.0] - 2026-11-13` it prints `260---2026-11-13`).
-   - End the commit message with `Whats-changed-edit: date X.Y.Z and add its CHANGELOG.md anchor`. The append-only check otherwise reads the new anchor as an edit to an old line.
    - Check: `python3 scripts/whats_changed.py check WHATS-CHANGED.md --release` must pass. It is the same gate the workflow runs before `npm publish`.
 3. Tag that commit `v<version>` (e.g. `git tag v2.6.0 && git push origin v2.6.0`).
 4. The workflow runs the test suite, verifies the tag matches `package.json`, checks that no WHATS-CHANGED.md entry is left Unreleased, publishes to npm with provenance, and creates a GitHub Release with generated notes.

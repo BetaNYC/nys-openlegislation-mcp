@@ -11,6 +11,25 @@
  */
 import { z } from "zod";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { createRequire } from "node:module";
+import { createBetanycTools } from "./betanyc-tools.js";
+
+/** package.json's version, the one npm published (index.ts reads it the same way for serverInfo). */
+export const PACKAGE_VERSION: string = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
+
+/**
+ * whats_changed and about_betanyc, the two tools every BetaNYC MCP server carries
+ * (betanyc-ai-workspace platform/system/whats-changed-standard.md § 7). betanyc-tools.ts is
+ * a copy of the workspace's canonical file: never edit it here. WHATS-CHANGED.md ships in
+ * the npm package (package.json `files`), one level above dist/. This repo has no website,
+ * so links to an entry go to the file on GitHub. handlers.ts dispatches to it first.
+ */
+export const betanyc = createBetanycTools({
+  serverName: "nys-openlegislation-mcp",
+  version: PACKAGE_VERSION,
+  repoUrl: "https://github.com/BetaNYC/nys-openlegislation-mcp",
+  whatsChangedPath: new URL("../WHATS-CHANGED.md", import.meta.url),
+});
 
 export const TOOLS: Tool[] = [
   // ── Bills ─────────────────────────────────────────────────────────────────
@@ -563,6 +582,10 @@ export const TOOLS: Tool[] = [
       required: ["term"],
     },
   },
+  // What changed in this server, and who built it (BetaNYC standard tools). The shared
+  // module types inputSchema loosely (Record<string, unknown>) so it needs no SDK import;
+  // each schema is a JSON Schema object with type "object", which is what Tool requires.
+  ...(betanyc.tools as Tool[]),
 ];
 
 /**

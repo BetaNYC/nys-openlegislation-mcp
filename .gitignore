@@ -6,3 +6,4 @@ dist/
 data/corpus.db
 data/corpus.db-shm
 data/corpus.db-wal
+__pycache__/

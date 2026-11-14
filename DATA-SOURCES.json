@@ -1,0 +1,172 @@
+{
+  "format": "betanyc-data-sources/1",
+  "server": {
+    "name": "nys-openlegislation-mcp",
+    "title": "NYS Open Legislation MCP server",
+    "description": "An MCP server for New York State legislation: bills and resolutions, votes, laws, Senate and Assembly members, committees, calendars, agendas and transcripts, from the New York State Senate's Open Legislation API. With an API key it asks the API when you ask; it can also answer from a local copy of the API's data built on your own machine. Nothing is invented: answers are the Senate's records as the API returns them.",
+    "kind": "mcp",
+    "repository": "https://github.com/BetaNYC/nys-openlegislation-mcp",
+    "documentation_url": "https://github.com/BetaNYC/nys-openlegislation-mcp#readme",
+    "package_url": "https://www.npmjs.com/package/@betanyc/nys-openlegislation-mcp",
+    "license": {
+      "name": "MIT",
+      "url": "https://spdx.org/licenses/MIT.html"
+    },
+    "contact_email": "lab@beta.nyc",
+    "keywords": [
+      "new york state",
+      "legislation",
+      "bills",
+      "laws",
+      "senate",
+      "assembly",
+      "open legislation",
+      "open government"
+    ]
+  },
+  "sources": [
+    {
+      "id": "live",
+      "title": "Open Legislation, live",
+      "what": "New York State bills and resolutions with their text, status, actions and votes; the State's consolidated and unconsolidated laws; Senate and Assembly members; Senate committees and their meetings; Senate floor calendars and committee agendas; Senate floor and public hearing transcripts; and the API's feed of recent changes. Fetched from the Senate's API when asked.",
+      "source_name": "Open Legislation API",
+      "publisher": {
+        "name": "New York State Senate"
+      },
+      "source_url": "https://legislation.nysenate.gov/static/docs/html/index.html",
+      "official": true,
+      "how_gathered": "Read-only requests to the Senate's Open Legislation API at the moment you ask. The Senate receives the legislative data from the Legislative Bill Drafting Commission (LBDC) in a raw file format, and Open Legislation cleans it up before publishing it through the API. Needs NYS_LEGISLATION_API_KEY (a free key from the Senate); a server without one cannot reach this source.",
+      "changes": {
+        "changed": true,
+        "steps": [
+          "reshaped"
+        ],
+        "detail": "Passed on as the API returns it, with three additions that change no value: the paging totals the API puts beside a list of results are copied in with the results, each bill gets a link to its page on nysenate.gov, and each law document gets a link to the law on nysenate.gov."
+      },
+      "verify_at": "https://legislation.nysenate.gov/",
+      "freshness": {
+        "kind": "live"
+      },
+      "update_frequency": "continual",
+      "coverage": {
+        "start": null,
+        "end": null,
+        "geography": "New York State Legislature (Senate and Assembly)",
+        "known_gaps": []
+      },
+      "terms": {
+        "license_name": "None stated by the publisher",
+        "terms_url": "https://legislation.nysenate.gov/static/docs/html/index.html",
+        "credit_line": "Source: New York State Senate, Open Legislation."
+      },
+      "report_errors": {
+        "upstream_url": "https://legislation.nysenate.gov/static/docs/html/getting_started.html",
+        "upstream_email": "openlegislation@nysenate.gov"
+      },
+      "tools": [
+        "search_bills",
+        "get_bill",
+        "list_bills",
+        "get_bill_votes",
+        "get_bill_updates",
+        "list_laws",
+        "get_law_tree",
+        "get_law_section",
+        "list_members",
+        "get_member",
+        "search_members",
+        "list_committees",
+        "get_committee",
+        "get_committee_meetings",
+        "list_calendars",
+        "get_calendar",
+        "list_agendas",
+        "get_agenda",
+        "list_floor_transcripts",
+        "get_floor_transcript",
+        "list_hearing_transcripts",
+        "get_hearing_transcript",
+        "get_updates",
+        "search"
+      ],
+      "caveats": [
+        "Bill text, status, votes and law text are official legislative data but may be corrected or amended later. Check anything important at legislation.nysenate.gov.",
+        "Dates and times in the API's answers are New York local time, written without a time zone.",
+        "When this server also has a local copy (topic corpus), most tools answer from that copy first and ask the API only when the copy has nothing. An answer from the copy says so and gives the date it was last synced."
+      ],
+      "corrections": []
+    },
+    {
+      "id": "corpus",
+      "title": "Open Legislation, local copy",
+      "what": "A copy of Open Legislation API data saved on this machine in a local database: bills, laws, members, committees, calendars, agendas and transcript listings, and law and transcript text when the copy was built with them. Most tools answer from it first.",
+      "source_name": "Open Legislation API",
+      "publisher": {
+        "name": "New York State Senate"
+      },
+      "source_url": "https://legislation.nysenate.gov/static/docs/html/index.html",
+      "official": true,
+      "how_gathered": "Built on your own machine, not shipped in the package: this repository's scripts download the data from the Open Legislation API (scripts/fetch-data.js once, then scripts/sync.js to pick up changes, both with an API key) and save each item's JSON as the API returned it. The server then reads that copy with no network call.",
+      "changes": {
+        "changed": true,
+        "steps": [
+          "reshaped"
+        ],
+        "detail": "Each item is the API's own JSON, saved and read back unchanged, with a note on each answer giving the date the copy was last synced. search_members adds each member's full name and chamber, taken from the Senate's own records: the full name from the sponsor block of a bill the member sponsored, which the member list does not carry."
+      },
+      "verify_at": "https://legislation.nysenate.gov/",
+      "freshness": {
+        "kind": "hook",
+        "key": "corpus_synced"
+      },
+      "update_frequency": "continual",
+      "coverage": {
+        "start": null,
+        "end": null,
+        "geography": "New York State Legislature (Senate and Assembly)",
+        "known_gaps": [
+          "The copy starts at the session year chosen when it was built (2009 unless the person who built it chose otherwise), and is only as current as its last sync.",
+          "Committees are not picked up by the sync, because the API's change feed does not carry them; they are as current as the last full download.",
+          "Law text and transcript text are in the copy only if it was built with them, and are not picked up by the sync. Without them, those tools ask the live API, or, with no API key, say the item is not in the copy.",
+          "A member who has never been the prime sponsor of a bill in the copy has no full name in it.",
+          "Lists answered from the copy have no total count; only the live API gives one."
+        ]
+      },
+      "terms": {
+        "license_name": "None stated by the publisher",
+        "terms_url": "https://legislation.nysenate.gov/static/docs/html/index.html",
+        "credit_line": "Source: New York State Senate, Open Legislation."
+      },
+      "report_errors": {
+        "upstream_url": "https://legislation.nysenate.gov/static/docs/html/getting_started.html",
+        "upstream_email": "openlegislation@nysenate.gov"
+      },
+      "tools": [
+        "search_bills",
+        "get_bill",
+        "list_bills",
+        "list_laws",
+        "get_law_tree",
+        "get_law_section",
+        "list_members",
+        "get_member",
+        "search_members",
+        "list_committees",
+        "get_committee",
+        "list_calendars",
+        "get_calendar",
+        "list_agendas",
+        "get_agenda",
+        "list_floor_transcripts",
+        "get_floor_transcript",
+        "list_hearing_transcripts",
+        "get_hearing_transcript"
+      ],
+      "caveats": [
+        "Not found in the local copy is not the same as does not exist: the copy may not have synced that item. With an API key, an empty answer from the copy is checked against the live API.",
+        "Without an API key, this copy is the only data the server has, and it may be out of date."
+      ],
+      "corrections": []
+    }
+  ]
+}

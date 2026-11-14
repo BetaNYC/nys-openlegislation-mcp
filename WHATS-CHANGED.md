@@ -7,6 +7,13 @@ This page lists the changes to nys-openlegislation-mcp that a reader would notic
 
 To report a bug in this server or ask for a new feature, [open an issue on GitHub](https://github.com/BetaNYC/nys-openlegislation-mcp/issues).
 
+## Unreleased: A tool that says where the data comes from
+
+- **Tags:** MCP
+- **What changed:** A new tool lets your AI assistant answer "where does this data come from?" It names the source, the New York State Senate's Open Legislation service, says the bills, votes and laws are the Senate's official records with their values unchanged, says how current the data is on this server, and where to check a record on the Senate's website or report an error in it. It also gives BetaNYC's email address for questions and error reports, lab@beta.nyc. The same list of sources is published as a data catalog.
+- **MCP version:** [nys-openlegislation-mcp 2.7.0](CHANGELOG.md)
+- **More detail:** [Where the data comes from](DATA-SOURCES.json) · [Data catalog](data.json) · [Release notes](CHANGELOG.md)
+
 ## 2026-11-13: Two tools that explain the server and list what changed
 
 - **Tags:** MCP

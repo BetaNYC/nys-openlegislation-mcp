@@ -5,6 +5,48 @@ All notable changes to `@betanyc/nys-openlegislation-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - unreleased
+
+Adds `about_data`, the third tool BetaNYC is adding to each of its MCP servers, and moves to
+shared module 1.3.6. Tracking: BetaNYC/betanyc-ai-workspace#1655 (epic #1652).
+
+### Added
+
+- `about_data`: where this server's data comes from, answered from the new
+  `DATA-SOURCES.json` (the about-data standard). Two topics: `live` (the Senate's
+  Open Legislation API, asked when you ask) and `corpus` (the local copy built with
+  `scripts/fetch-data.js` and `scripts/sync.js`). A tool name works as a topic too.
+  Each answer names the source and its publisher (the New York State Senate), says
+  the records are official and passed on with values unchanged, how current the
+  data is on this server, the terms, where to check a record and where to report an
+  error, and gives BetaNYC's address for questions, lab@beta.nyc.
+- Without `NYS_LEGISLATION_API_KEY`, `about_data` says the live source is not
+  available on this server instead of "fetched when you ask"; without a local copy,
+  it says the same for `corpus` (`unavailableSources`, shared module 1.3.6). With a
+  copy, the `corpus` date is its `last_synced_at`, read from the copy with no
+  network call.
+- `data.json`, a DCAT-US 3.0 catalog built from `DATA-SOURCES.json` by
+  `scripts/whats_changed.py about-data catalog` (never edited by hand). Both files
+  ship in the npm package.
+- The server now sends MCP `instructions`: what it covers, and when to call
+  `about_data`, `about_betanyc` and `whats_changed`.
+- A test fails when any tool has no source in `DATA-SOURCES.json`
+  (`assertEveryToolExplained`), so a new tool cannot ship unexplained.
+- CI: an `about-data` job checks `DATA-SOURCES.json` against the server's real tool
+  list, checks `data.json` is current, and validates both against the JSON Schema
+  and DCAT-US 3.0 with pinned validators. The release workflow runs
+  `about-data check --release` before `npm publish`.
+
+### Changed
+
+- 27 tools instead of 26.
+- Shared module 1.3.6: `src/betanyc-tools.ts` is BetaNYC's shared module 1.3.6, and
+  `scripts/whats_changed.py` and the about-data validator kit
+  (`scripts/tests/catalog_validate.py`, `scripts/mcp_shared/`) are its 1.3.5 files,
+  unchanged in 1.3.6, all copied in unchanged. Never edit the copies.
+- The shared tools are dispatched with `callAsync`, because the corpus freshness
+  hook reads the local copy asynchronously.
+
 ## [2.6.0] - 2026-11-13
 
 Adds the two tools BetaNYC is adding to each of its MCP servers. Tracking:

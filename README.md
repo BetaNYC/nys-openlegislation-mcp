@@ -21,7 +21,7 @@ Built by [BetaNYC](https://beta.nyc) as part of a suite of civic data MCP server
 | **Transcripts** | Floor session and public hearing transcripts |
 | **Updates** | Aggregate change feed across all content types |
 | **Search** | Full-text ElasticSearch within a content type (bills, laws, agendas, calendars, transcripts, hearings) |
-| **About this server** | What changed in it, and who built it |
+| **About this server** | What changed in it, who built it, and where its data comes from |
 
 ---
 
@@ -244,8 +244,11 @@ new doc type in a browser before adding it.
 |---|---|
 | `whats_changed` | What changed in this server, newest first, from [WHATS-CHANGED.md](WHATS-CHANGED.md), which ships with the package: new tools and corrections, with what to re-check if you used an old answer. Optional `since` (`YYYY-MM-DD`), `tag` (`Site`, `Data`, `MCP` or `Correction`) and `limit` (1 to 50) |
 | `about_betanyc` | Who built the server (BetaNYC, a project of the Fund for the City of New York), its version and repository, where to report a bug in this server or ask for a new feature, and BetaNYC's links. No parameters |
+| `about_data` | Where the data comes from, from [DATA-SOURCES.json](DATA-SOURCES.json), which ships with the package: the source and its publisher (the New York State Senate), whether it is an official record, how current it is on this server, the terms, where to check a record and where to report an error, and BetaNYC's address for questions, lab@beta.nyc. Optional `topic`: `live` (the API), `corpus` (the local copy), or a tool name |
 
-These two need no API key and never call the network. BetaNYC is adding them to each of its MCP servers; `src/betanyc-tools.ts` is a copy of the canonical file in BetaNYC's workspace, so never edit the copy.
+These three need no API key and never call the network. Without a key, `about_data` says the live API is not available on this server; without a local copy, it says the same for the copy, and with one it gives the copy's last sync time. BetaNYC is adding them to each of its MCP servers; `src/betanyc-tools.ts` is a copy of the canonical file in BetaNYC's workspace, so never edit the copy.
+
+The same list of sources is published as a [DCAT-US 3.0](https://resources.data.gov/resources/dcat-us3/) data catalog, [data.json](data.json). It is built from `DATA-SOURCES.json` with `python3 scripts/whats_changed.py about-data catalog DATA-SOURCES.json`; never edit it by hand. CI checks that it is current, and that every tool has a source.
 
 ---
 

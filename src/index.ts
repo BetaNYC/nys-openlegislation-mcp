@@ -5,7 +5,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { TOOLS } from "./tools.js";
+import { TOOLS, SERVER_INSTRUCTIONS } from "./tools.js";
 import { callTool } from "./handlers.js";
 import { hasLocalCorpus, getDbPath } from "./db.js";
 import { createRequire } from "node:module";
@@ -55,7 +55,7 @@ console.error(
 
 const server = new Server(
   { name: "nys-openlegislation-mcp", version },
-  { capabilities: { tools: {} } }
+  { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS }
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));

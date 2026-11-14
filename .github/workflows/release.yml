@@ -9,7 +9,7 @@ name: Release
 # and the CHANGELOG.md heading (README, "Releases") → push a tag `v<version>`
 # on that commit (e.g. `v2.0.1`) → this workflow runs the test
 # suite, verifies server.json and the tag match package.json, checks that no
-# WHATS-CHANGED.md entry is left Unreleased, publishes to npm
+# WHATS-CHANGED.md entry is left Unreleased and DATA-SOURCES.json is valid, publishes to npm
 # with provenance, and creates a GitHub Release with auto-generated notes.
 # A successful run then triggers publish-mcp.yml, which lists the version in
 # the official MCP Registry.
@@ -65,6 +65,15 @@ jobs:
       # canonical file; never edit it here.
       - name: WHATS-CHANGED.md has no Unreleased entry
         run: python3 scripts/whats_changed.py check WHATS-CHANGED.md --release
+      # DATA-SOURCES.json (about-data standard): fails on any error, a tool without a source,
+      # or the placeholder contact address, so a release cannot ship a broken about_data.
+      - name: DATA-SOURCES.json is valid and names a real contact
+        run: |
+          node --input-type=module -e '
+          const { TOOLS } = await import("./dist/tools.js");
+          console.log(JSON.stringify(TOOLS.map((t) => t.name)));
+          ' > "$RUNNER_TEMP/tools.json"
+          python3 scripts/whats_changed.py about-data check DATA-SOURCES.json --release --tools-file "$RUNNER_TEMP/tools.json"
       - name: Publish to npm (with provenance)
         run: npm publish --provenance --access public
         env:

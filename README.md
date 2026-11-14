@@ -21,7 +21,7 @@ Built by [BetaNYC](https://beta.nyc) as part of a suite of civic data MCP server
 | **Transcripts** | Floor session and public hearing transcripts |
 | **Updates** | Aggregate change feed across all content types |
 | **Search** | Full-text ElasticSearch within a content type (bills, laws, agendas, calendars, transcripts, hearings) |
-| **About this server** | What changed in it, and who built it |
+| **About this server** | What changed in it, who built it, and where its data comes from |
 
 ---
 
@@ -137,9 +137,11 @@ NYS_LEGISLATION_API_KEY=your-key node scripts/sync.js
 
 | Flag | Default | Description |
 |---|---|---|
-| `--from=YYYY-MM-DDTHH:MM:SS` | last sync time | Override the start datetime |
+| `--from=YYYY-MM-DDTHH:MM:SS` | last sync time | Override the start, in New York local time (the API's own convention) |
 | `--delay-ms=N` | `150` | Delay between API calls in ms |
 | `--dry-run` | off | Print what would be synced without writing |
+
+The Senate's API reads every time as New York local time. Each sync asks for the changes from where the last one ended up to two minutes ago, and saves that end time with its New York offset (for example `2026-11-13T16:58:00-05:00`). A copy last synced by a version before 2.7.0 saved UTC times with no zone, which made each sync skip the changes made in the four or five hours after the previous one; the next sync reads such a value as UTC and starts from the right time. To pick up changes an older version missed, run the sync once with `--from` set to the day you first built the copy. `fetch-data.js` never moves an existing sync time forward, so a partial load such as `--types=committees` does not make the next sync skip anything.
 
 **Cron example** (nightly at 2am):
 ```
@@ -244,8 +246,11 @@ new doc type in a browser before adding it.
 |---|---|
 | `whats_changed` | What changed in this server, newest first, from [WHATS-CHANGED.md](WHATS-CHANGED.md), which ships with the package: new tools and corrections, with what to re-check if you used an old answer. Optional `since` (`YYYY-MM-DD`), `tag` (`Site`, `Data`, `MCP` or `Correction`) and `limit` (1 to 50) |
 | `about_betanyc` | Who built the server (BetaNYC, a project of the Fund for the City of New York), its version and repository, where to report a bug in this server or ask for a new feature, and BetaNYC's links. No parameters |
+| `about_data` | Where the data comes from, from [DATA-SOURCES.json](DATA-SOURCES.json), which ships with the package: the source and its publisher (the New York State Senate), whether it is an official record, how current it is on this server, the terms, where to check a record and where to report an error, and BetaNYC's address for questions, lab@beta.nyc. Optional `topic`: `live` (the API), `corpus` (the local copy), or a tool name |
 
-These two need no API key and never call the network. BetaNYC is adding them to each of its MCP servers; `src/betanyc-tools.ts` is a copy of the canonical file in BetaNYC's workspace, so never edit the copy.
+These three need no API key and never call the network. Without a key, `about_data` says the live API is not available on this server; without a local copy, it says the same for the copy, and with one it gives the copy's last sync time. BetaNYC is adding them to each of its MCP servers; `src/betanyc-tools.ts` is a copy of the canonical file in BetaNYC's workspace, so never edit the copy.
+
+The same list of sources is published as a [DCAT-US 3.0](https://resources.data.gov/resources/dcat-us3/) data catalog, [data.json](data.json). It is built from `DATA-SOURCES.json` with `python3 scripts/whats_changed.py about-data catalog DATA-SOURCES.json`; never edit it by hand. CI checks that it is current, and that every tool has a source.
 
 ---
 

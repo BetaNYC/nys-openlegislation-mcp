@@ -7,6 +7,15 @@ This page lists the changes to nys-openlegislation-mcp that a reader would notic
 
 To report a bug in this server or ask for a new feature, [open an issue on GitHub](https://github.com/BetaNYC/nys-openlegislation-mcp/issues).
 
+## Unreleased: Where the data comes from; local copies missed changes after each sync
+
+- **Tags:** MCP, Correction
+- **What changed:** A new tool lets your AI assistant answer "where does this data come from?" It names the source, the New York State Senate's Open Legislation service, says the bills, votes and laws are the Senate's official records with their values unchanged, says how current the data is on this server, and where to check a record on the Senate's website or report an error in it. It also gives BetaNYC's email address for questions and error reports, lab@beta.nyc. The same list of sources is published as a data catalog. This release also fixes the scripts that keep a local copy of the data up to date. From May 26, 2026 until this release, each sync told the Senate's service the time in UTC, but the service reads every time as New York time. So each sync asked for changes up to four or five hours in the future, and the next sync started from that point: changes the Senate made in the four or five hours after each sync, and during the first download, never reached the copy. The time shown as "synced" was UTC too, without saying so. The scripts now use New York time and save the time with its time zone, and answers show the sync time with its zone.
+- **If you used the old numbers:** This affects only answers from a local copy, the ones that say "local corpus (synced …)". A bill's status, an agenda, a calendar or a law from a copy synced before this release may be missing a change. Check anything you used on legislation.nysenate.gov, or ask again with an API key set, which asks the Senate's service directly. To repair a copy, update the server and run the sync once from the day you first built the copy, for example `node scripts/sync.js --from=2026-06-01T00:00:00`, which fetches every change since then again; committees are not part of the sync, so re-run `node scripts/fetch-data.js --types=committees` too. A sync time shown without a zone was UTC: "synced 2026-10-22T04:00:00" meant midnight in New York.
+- **Who it affects:** People who built a local copy of the data with the repository's scripts. Answers from the Senate's live service were not affected.
+- **MCP version:** [nys-openlegislation-mcp 2.7.0](CHANGELOG.md)
+- **More detail:** [Where the data comes from](DATA-SOURCES.json) · [Data catalog](data.json) · [Release notes](CHANGELOG.md)
+
 ## 2026-11-13: Two tools that explain the server and list what changed
 
 - **Tags:** MCP

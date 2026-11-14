@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.7.0] - unreleased
 
 Adds `about_data`, the third tool BetaNYC is adding to each of its MCP servers, and moves to
-shared module 1.3.6. Tracking: BetaNYC/betanyc-ai-workspace#1655 (epic #1652).
+shared module 1.3.7. Fixes the local copy's sync times. Tracking: BetaNYC/betanyc-ai-workspace#1655 (epic #1652).
 
 ### Added
 
@@ -22,9 +22,9 @@ shared module 1.3.6. Tracking: BetaNYC/betanyc-ai-workspace#1655 (epic #1652).
   error, and gives BetaNYC's address for questions, lab@beta.nyc.
 - Without `NYS_LEGISLATION_API_KEY`, `about_data` says the live source is not
   available on this server instead of "fetched when you ask"; without a local copy,
-  it says the same for `corpus` (`unavailableSources`, shared module 1.3.6). With a
+  it says the same for `corpus` (`unavailableSources`, shared module 1.3.7). With a
   copy, the `corpus` date is its `last_synced_at`, read from the copy with no
-  network call.
+  network call and shown with its time zone (see Fixed).
 - `data.json`, a DCAT-US 3.0 catalog built from `DATA-SOURCES.json` by
   `scripts/whats_changed.py about-data catalog` (never edited by hand). Both files
   ship in the npm package.
@@ -40,12 +40,44 @@ shared module 1.3.6. Tracking: BetaNYC/betanyc-ai-workspace#1655 (epic #1652).
 ### Changed
 
 - 27 tools instead of 26.
-- Shared module 1.3.6: `src/betanyc-tools.ts` is BetaNYC's shared module 1.3.6, and
-  `scripts/whats_changed.py` and the about-data validator kit
-  (`scripts/tests/catalog_validate.py`, `scripts/mcp_shared/`) are its 1.3.5 files,
-  unchanged in 1.3.6, all copied in unchanged. Never edit the copies.
+- Shared module 1.3.7: `src/betanyc-tools.ts` and `scripts/whats_changed.py` are
+  BetaNYC's shared module 1.3.7, and the about-data validator kit
+  (`scripts/tests/catalog_validate.py`, `scripts/mcp_shared/`) is unchanged since
+  1.3.5, all copied in unchanged (`whats_changed_drift.py compare`: CURRENT). Never
+  edit the copies.
 - The shared tools are dispatched with `callAsync`, because the corpus freshness
   hook reads the local copy asynchronously.
+
+### Fixed
+
+- **The local copy's sync missed changes after every sync (since 2.0.0).** The
+  Open Legislation API reads every date and time as New York local time with no
+  offset, and ignores an offset it is sent (API Conventions, "Dates and times").
+  `scripts/sync.js` sent `new Date().toISOString().split(".")[0]`, the UTC time with
+  its `Z` cut off, as the end of each update range, and stored it as the next
+  range's start; `scripts/fetch-data.js` seeded the watermark the same way, after
+  the load. So each range ended four or five hours in the future, and changes the
+  Senate processed in that window, and during the first download, were never
+  fetched. Now, following "Keeping Up with Changes":
+  - each range ends at New York now minus 2 minutes, sent as New York wall time
+    (`scripts/lib/ny-time.js`, through `Intl` with `America/New_York`, so daylight
+    saving time is handled by the time zone database);
+  - `last_synced_at` is stored with its New York offset (for example
+    `2026-11-13T16:58:00-05:00`), one exact instant even in the repeated hour in
+    November;
+  - `fetch-data.js` notes the time before the load, not after, and never moves an
+    existing watermark forward (a later `--types=committees` load used to reset it
+    and make the next sync skip bill changes);
+  - `--from` is read as New York local time, the API's own convention, or converted
+    if it carries a zone.
+- **Old corpora.** A `last_synced_at` with no zone can only have been written by an
+  earlier version, as UTC, so it is read as UTC: the next sync starts from the
+  instant the last one really ran, in New York time, and then stores the zoned
+  form. Nothing is rewritten in place. Changes missed by earlier syncs are picked up
+  by running the sync once with `--from` set to the day the copy was built.
+- **Readers.** Local answers' `source: "local corpus (synced …)"` and `about_data`'s
+  corpus date showed the stored value with no zone. Both now show it with its zone
+  (`src/syncTime.ts`): the stored offset, or `Z` for an old UTC value.
 
 ## [2.6.0] - 2026-11-13
 

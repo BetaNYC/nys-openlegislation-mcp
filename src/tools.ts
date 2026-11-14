@@ -14,6 +14,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { createRequire } from "node:module";
 import { BETANYC_INSTRUCTIONS, createBetanycTools } from "./betanyc-tools.js";
 import { getSyncState, hasLocalCorpus } from "./db.js";
+import { syncedAtWithZone } from "./syncTime.js";
 
 /** package.json's version, the one npm published (index.ts reads it the same way for serverInfo). */
 export const PACKAGE_VERSION: string = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
@@ -34,24 +35,16 @@ export const CORPUS_UNAVAILABLE_REASON =
 
 /**
  * When the local corpus was last synced, for about_data's `corpus` source. Read from the
- * corpus's own sync_state, with no network call; null when there is no readable value.
- * scripts/fetch-data.js and scripts/sync.js write last_synced_at as
- * `new Date().toISOString().split(".")[0]`: a UTC time with its zone cut off. The Z is put
- * back so the time means what it is. Any other shape is passed on as it is, and about_data
- * reports it as unreadable rather than guess its zone.
+ * corpus's own sync_state, with no network call; null when there is no readable value. The
+ * value is shown with its zone (syncedAtWithZone): a New York offset since 2.7.0, or, for a
+ * corpus last synced by an older version, the UTC Z that version cut off.
  */
 export async function corpusSyncedAt(): Promise<string | null> {
-  return syncedAtAsUtc((await getSyncState())?.last_synced_at);
-}
-
-/** last_synced_at as the scripts write it (`YYYY-MM-DDTHH:MM:SS`, UTC) with its Z put back. */
-export function syncedAtAsUtc(value: string | null | undefined): string | null {
-  if (!value) return null;
-  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value) ? `${value}Z` : value;
+  return syncedAtWithZone((await getSyncState())?.last_synced_at);
 }
 
 /** The shared tools for a server with or without an API key and a local corpus. Sources this
- * server cannot reach are passed as unavailableSources (shared module 1.3.6), so about_data
+ * server cannot reach are passed as unavailableSources (shared module 1.3.7), so about_data
  * never says live data is fetched when there is no key. `dataSourcesText` is for tests. */
 export function betanycTools(ctx: { hasKey: boolean; hasCorpus: boolean; dataSourcesText?: string }) {
   const unavailable: Record<string, string> = {

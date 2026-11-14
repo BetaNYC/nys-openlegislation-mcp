@@ -137,9 +137,11 @@ NYS_LEGISLATION_API_KEY=your-key node scripts/sync.js
 
 | Flag | Default | Description |
 |---|---|---|
-| `--from=YYYY-MM-DDTHH:MM:SS` | last sync time | Override the start datetime |
+| `--from=YYYY-MM-DDTHH:MM:SS` | last sync time | Override the start, in New York local time (the API's own convention) |
 | `--delay-ms=N` | `150` | Delay between API calls in ms |
 | `--dry-run` | off | Print what would be synced without writing |
+
+The Senate's API reads every time as New York local time. Each sync asks for the changes from where the last one ended up to two minutes ago, and saves that end time with its New York offset (for example `2026-11-13T16:58:00-05:00`). A copy last synced by a version before 2.7.0 saved UTC times with no zone, which made each sync skip the changes made in the four or five hours after the previous one; the next sync reads such a value as UTC and starts from the right time. To pick up changes an older version missed, run the sync once with `--from` set to the day you first built the copy. `fetch-data.js` never moves an existing sync time forward, so a partial load such as `--types=committees` does not make the next sync skip anything.
 
 **Cron example** (nightly at 2am):
 ```

@@ -31,7 +31,8 @@
       "what": "New York State bills and resolutions with their text, status, actions and votes; the State's consolidated and unconsolidated laws; Senate and Assembly members; Senate committees and their meetings; Senate floor calendars and committee agendas; Senate floor and public hearing transcripts; and the API's feed of recent changes. Fetched from the Senate's API when asked.",
       "source_name": "Open Legislation API",
       "publisher": {
-        "name": "New York State Senate"
+        "name": "New York State Senate",
+        "url": "https://www.nysenate.gov/"
       },
       "source_url": "https://legislation.nysenate.gov/static/docs/html/index.html",
       "official": true,
@@ -52,16 +53,17 @@
         "start": null,
         "end": null,
         "geography": "New York State Legislature (Senate and Assembly)",
-        "known_gaps": []
+        "known_gaps": [
+          "Committees, committee meetings, floor calendars, agendas and floor transcripts are the Senate's only. The Senate does not say how far back each kind of data goes."
+        ]
       },
       "terms": {
-        "license_name": "None stated by the publisher",
-        "terms_url": "https://legislation.nysenate.gov/static/docs/html/index.html",
+        "license_name": "None stated for the Open Legislation API; NYSenate.gov's Copyright Policy licenses text on Senate websites under CC BY-NC-ND 3.0 US, with a waiver allowing reuse not related to political fundraising",
+        "terms_url": "https://www.nysenate.gov/policies-and-waivers",
         "credit_line": "Source: New York State Senate, Open Legislation."
       },
       "report_errors": {
-        "upstream_url": "https://legislation.nysenate.gov/static/docs/html/getting_started.html",
-        "upstream_email": "openlegislation@nysenate.gov"
+        "upstream_url": "https://github.com/nysenate/OpenLegislation/issues"
       },
       "tools": [
         "search_bills",
@@ -102,17 +104,18 @@
       "what": "A copy of Open Legislation API data saved on this machine in a local database: bills, laws, members, committees, calendars, agendas and transcript listings, and law and transcript text when the copy was built with them. Most tools answer from it first.",
       "source_name": "Open Legislation API",
       "publisher": {
-        "name": "New York State Senate"
+        "name": "New York State Senate",
+        "url": "https://www.nysenate.gov/"
       },
       "source_url": "https://legislation.nysenate.gov/static/docs/html/index.html",
       "official": true,
-      "how_gathered": "Built on your own machine, not shipped in the package: this repository's scripts download the data from the Open Legislation API (scripts/fetch-data.js once, then scripts/sync.js to pick up changes, both with an API key) and save each item's JSON as the API returned it. The server then reads that copy with no network call.",
+      "how_gathered": "Built on your own machine, not shipped in the package: this repository's scripts download the data from the Open Legislation API (scripts/fetch-data.js once, then scripts/sync.js to pick up changes, both with an API key) and save each item's JSON as the API returned it. Each sync asks for the changes since the last one ended, in New York time as the API expects, and records when it ended. The server then reads that copy with no network call.",
       "changes": {
         "changed": true,
         "steps": [
           "reshaped"
         ],
-        "detail": "Each item is the API's own JSON, saved and read back unchanged, with a note on each answer giving the date the copy was last synced. search_members adds each member's full name and chamber, taken from the Senate's own records: the full name from the sponsor block of a bill the member sponsored, which the member list does not carry."
+        "detail": "Each item is the API's own JSON, saved and read back unchanged, with a note on each answer giving the time the copy was last synced. search_members adds each member's chamber and full name, taken from the Senate's own records: the full name is the one on the member's most recent sponsored bill, used for every session, because the member list does not carry it."
       },
       "verify_at": "https://legislation.nysenate.gov/",
       "freshness": {
@@ -125,21 +128,22 @@
         "end": null,
         "geography": "New York State Legislature (Senate and Assembly)",
         "known_gaps": [
+          "Committees, committee meetings, floor calendars, agendas and floor transcripts are the Senate's only. The Senate does not say how far back each kind of data goes.",
           "The copy starts at the session year chosen when it was built (2009 unless the person who built it chose otherwise), and is only as current as its last sync.",
           "Committees are not picked up by the sync, because the API's change feed does not carry them; they are as current as the last full download.",
           "Law text and transcript text are in the copy only if it was built with them, and are not picked up by the sync. Without them, those tools ask the live API, or, with no API key, say the item is not in the copy.",
           "A member who has never been the prime sponsor of a bill in the copy has no full name in it.",
-          "Lists answered from the copy have no total count; only the live API gives one."
+          "Lists answered from the copy have no total count; only the live API gives one.",
+          "A copy last synced by a version before 2.7.0 can be missing changes made in the hours after each of its syncs, and during its first download. Running the sync once from the date the copy was built picks them up (see What's changed)."
         ]
       },
       "terms": {
-        "license_name": "None stated by the publisher",
-        "terms_url": "https://legislation.nysenate.gov/static/docs/html/index.html",
+        "license_name": "None stated for the Open Legislation API; NYSenate.gov's Copyright Policy licenses text on Senate websites under CC BY-NC-ND 3.0 US, with a waiver allowing reuse not related to political fundraising",
+        "terms_url": "https://www.nysenate.gov/policies-and-waivers",
         "credit_line": "Source: New York State Senate, Open Legislation."
       },
       "report_errors": {
-        "upstream_url": "https://legislation.nysenate.gov/static/docs/html/getting_started.html",
-        "upstream_email": "openlegislation@nysenate.gov"
+        "upstream_url": "https://github.com/nysenate/OpenLegislation/issues"
       },
       "tools": [
         "search_bills",

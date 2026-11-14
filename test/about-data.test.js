@@ -25,9 +25,10 @@ const CORPUS = join(dir, "corpus.db");
 }
 process.env.NYS_CORPUS_DB = CORPUS;
 
-const { TOOLS, betanycTools, syncedAtAsUtc, SERVER_INSTRUCTIONS, LIVE_UNAVAILABLE_REASON, CORPUS_UNAVAILABLE_REASON } =
+const { TOOLS, betanycTools, SERVER_INSTRUCTIONS, LIVE_UNAVAILABLE_REASON, CORPUS_UNAVAILABLE_REASON } =
   await import("../dist/tools.js");
 const { assertEveryToolExplained } = await import("../dist/betanyc-tools.js");
+const { syncedAtWithZone } = await import("../dist/syncTime.js");
 
 const DS_TEXT = readFileSync("DATA-SOURCES.json", "utf8");
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
@@ -80,7 +81,7 @@ test("no key: the live source says it is not available here, not 'fetched when y
   assert.equal(c.as_of, "2026-10-22T04:00:00Z");
 });
 
-test("the local copy's date is its last sync, read from the copy, as UTC", async () => {
+test("the local copy's date is its last sync, read from the copy; an old unmarked value is UTC", async () => {
   const s = one((await ask({ topic: "corpus" })).body, "corpus");
   assert.equal(s.as_of_status, "read");
   assert.equal(s.as_of, "2026-10-22T04:00:00Z");
@@ -92,11 +93,9 @@ test("no local copy: the corpus source says it is not available here", async () 
   assert.equal(s.as_of, `not available on this server: ${CORPUS_UNAVAILABLE_REASON}`);
 });
 
-test("last_synced_at: the scripts' UTC time gets its Z back; any other shape is passed on, never guessed", () => {
-  assert.equal(syncedAtAsUtc("2026-10-22T04:00:00"), "2026-10-22T04:00:00Z");
-  assert.equal(syncedAtAsUtc("2026-10-22 04:00:00"), "2026-10-22 04:00:00");
-  assert.equal(syncedAtAsUtc(undefined), null);
-  assert.equal(syncedAtAsUtc(""), null);
+test("a corpus synced by 2.7.0 or later: the stored New York time, with its offset", () => {
+  // corpusSyncedAt reads through syncedAtWithZone; test/sync-time.test.js covers it in full.
+  assert.equal(syncedAtWithZone("2026-11-13T16:58:00-05:00"), "2026-11-13T16:58:00-05:00");
 });
 
 test("a tool name works as a topic: live-only tools have one source, corpus-backed tools two", async () => {

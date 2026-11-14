@@ -10,7 +10,7 @@
  *   NYS_LEGISLATION_API_KEY=your-key node scripts/sync.js [options]
  *
  * Options:
- *   --from=YYYY-MM-DDTHH:MM:SS   Override the start datetime (default: last_synced_at from DB)
+ *   --from=YYYY-MM-DDTHH:MM:SS   Override the start, in New York local time (default: last_synced_at from DB)
  *   --delay-ms=N                  Delay between API calls in ms (default: 150)
  *   --dry-run                     Print what would be synced without writing to DB
  */
@@ -18,6 +18,7 @@
 import { existsSync } from "fs";
 import { START_OFFSET, nextOffset, isLastPage, basePrintNo } from "./lib/api-helpers.js";
 import { backfillMemberFullNames } from "./lib/members.js";
+import { nyStamp, nyWallTime, rangeEnd, resolveFrom } from "./lib/ny-time.js";
 
 let Database;
 try {
@@ -71,15 +72,20 @@ const syncState = Object.fromEntries(
 const INCLUDE_LAW_TEXT = syncState.include_law_text === "1";
 const INCLUDE_TRANSCRIPT_TEXT = syncState.include_transcript_text === "1";
 
-// Normalize legacy space-separated timestamps (stored before ISO fix) to ISO 8601 with T.
-const lastSyncedAt = (FROM_OVERRIDE ?? syncState.last_synced_at)?.replace(" ", "T");
-if (!lastSyncedAt) {
-  console.error("Error: No last_synced_at found in sync_state. Run fetch-data.js first.");
+// The API reads every time as New York local time with no offset, and ignores an offset it is
+// sent (conventions.html, "Dates and times"). Each range ends at New York now minus 2 minutes,
+// and that end, stored with its offset, is the next range's start (keeping_up.html). A stored
+// value with no zone was written by a version before 2.7.0 as UTC with its Z cut off, and is
+// read as UTC: see scripts/lib/ny-time.js.
+let fromDateTime;
+try {
+  fromDateTime = resolveFrom(FROM_OVERRIDE, syncState.last_synced_at);
+} catch (e) {
+  console.error(`Error: ${e.message}`);
   process.exit(1);
 }
-
-const toDateTime = new Date().toISOString().split(".")[0]; // ISO 8601 with T — required by the API
-const fromDateTime = lastSyncedAt;
+const rangeEndInstant = rangeEnd();
+const toDateTime = nyWallTime(rangeEndInstant); // New York wall time, as the API wants it
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -255,7 +261,7 @@ if (!DRY_RUN) {
     console.log(`  Member full names: ${filled} filled, ${missing} without a sponsored bill`);
   }
   if (failed === 0) {
-    setSyncState.run("last_synced_at", toDateTime);
+    setSyncState.run("last_synced_at", nyStamp(rangeEndInstant)); // the same instant, with its offset
   } else {
     // Leave the watermark where it was so the next run retries the window
     // that contained the failed items.

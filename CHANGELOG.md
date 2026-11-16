@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.7.0] - unreleased
 
 Adds `about_data`, the third tool BetaNYC is adding to each of its MCP servers, and moves to
-shared module 1.3.7. Fixes the local copy's sync times. Tracking: BetaNYC/betanyc-ai-workspace#1655 (epic #1652).
+shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betanyc-ai-workspace#1655 and #1672 (epic #1652).
 
 ### Added
 
@@ -17,12 +17,13 @@ shared module 1.3.7. Fixes the local copy's sync times. Tracking: BetaNYC/betany
   Open Legislation API, asked when you ask) and `corpus` (the local copy built with
   `scripts/fetch-data.js` and `scripts/sync.js`). A tool name works as a topic too.
   Each answer names the source and its publisher (the New York State Senate), says
-  the records are official and passed on with values unchanged, how current the
+  the records are the Senate's official records and that BetaNYC reshapes them, so
+  this copy is not the official record (shared module 1.4.0), how current the
   data is on this server, the terms, where to check a record and where to report an
   error, and gives BetaNYC's address for questions, lab@beta.nyc.
 - Without `NYS_LEGISLATION_API_KEY`, `about_data` says the live source is not
   available on this server instead of "fetched when you ask"; without a local copy,
-  it says the same for `corpus` (`unavailableSources`, shared module 1.3.7). With a
+  it says the same for `corpus` (`unavailableSources`, shared module 1.3.7 and later). With a
   copy, the `corpus` date is its `last_synced_at`, read from the copy with no
   network call and shown with its time zone (see Fixed).
 - `data.json`, a DCAT-US 3.0 catalog built from `DATA-SOURCES.json` by
@@ -40,10 +41,10 @@ shared module 1.3.7. Fixes the local copy's sync times. Tracking: BetaNYC/betany
 ### Changed
 
 - 27 tools instead of 26.
-- Shared module 1.3.7: `src/betanyc-tools.ts` and `scripts/whats_changed.py` are
-  BetaNYC's shared module 1.3.7, and the about-data validator kit
-  (`scripts/tests/catalog_validate.py`, `scripts/mcp_shared/`) is unchanged since
-  1.3.5, all copied in unchanged (`whats_changed_drift.py compare`: CURRENT). Never
+- Shared module 1.4.0: `src/betanyc-tools.ts`, `scripts/whats_changed.py` and the
+  about-data validator kit (`scripts/tests/catalog_validate.py`,
+  `scripts/mcp_shared/data-sources.schema.json`) are BetaNYC's shared module 1.4.0,
+  all copied in unchanged (`whats_changed_drift.py compare`: CURRENT). Never
   edit the copies.
 - The shared tools are dispatched with `callAsync`, because the corpus freshness
   hook reads the local copy asynchronously.

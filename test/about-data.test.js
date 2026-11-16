@@ -46,14 +46,14 @@ test("every tool says where its data comes from, so a new tool cannot ship unexp
   assert.equal(NAMES.length, 27);
 });
 
-test("two sources, both the Senate's official records with values unchanged", async () => {
+test("two sources, both the Senate's official records, reshaped by BetaNYC (shared module 1.4.0)", async () => {
   const { body } = await ask({});
   assert.deepEqual(body.topics, ["live", "corpus"]);
   for (const s of body.sources) {
     assert.equal(s.publisher, "New York State Senate", s.topic);
     assert.equal(s.source_url, "https://legislation.nysenate.gov/static/docs/html/index.html", s.topic);
     assert.equal(s.official, true, s.topic);
-    assert.equal(s.figures_official, true, `${s.topic}: reshaped only, so the figures stay official`);
+    assert.equal(s.figures_official, false, `${s.topic}: from 1.4.0 any step, reshaping too, means BetaNYC modified the data`);
     assert.deepEqual(s.changed_by_betanyc.steps, ["reshaped"], s.topic);
   }
 });
@@ -124,7 +124,7 @@ test("the server fails at startup when DATA-SOURCES.json names another repo", ()
 
 test("the server's instructions say when to call about_data, about_betanyc and whats_changed", () => {
   assert.match(SERVER_INSTRUCTIONS, /call about_data/);
-  assert.match(SERVER_INSTRUCTIONS, /figures_official/);
+  assert.match(SERVER_INSTRUCTIONS, /Never call data official when BetaNYC modified or produced it/);
   assert.match(SERVER_INSTRUCTIONS, /call about_betanyc/);
 });
 
@@ -153,7 +153,7 @@ test("about_data over stdio, with no key: live is not available, the copy gives 
     assert.match(live.as_of, /no NYS_LEGISLATION_API_KEY/);
     assert.equal(corpus.as_of, "2026-10-22T04:00:00Z");
     assert.equal(r.structuredContent.contact_email, "lab@beta.nyc");
-    assert.match(r.content[0].text, /Official record: yes, reshaped by BetaNYC \(values unchanged\)/);
+    assert.match(r.content[0].text, /^BetaNYC modified this data: reshaped it\. This copy should not be considered the official record\. Official record: Open Legislation API \(New York State Senate\), https:\/\/legislation\.nysenate\.gov\/static\/docs\/html\/index\.html$/m);
   } finally {
     await client.close();
   }

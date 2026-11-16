@@ -58,7 +58,7 @@
       "identifier": "https://github.com/BetaNYC/nys-openlegislation-mcp/blob/HEAD/DATA-SOURCES.json#live",
       "contactPoint": {
         "@type": "Kind",
-        "fn": "BetaNYC (serves this dataset; report errors in the data to New York State Senate: https://github.com/nysenate/OpenLegislation/issues; errors in this server: https://github.com/BetaNYC/nys-openlegislation-mcp/issues)",
+        "fn": "BetaNYC (serves this dataset; report errors in the data to BetaNYC: https://github.com/BetaNYC/nys-openlegislation-mcp/issues; errors in the original records to New York State Senate: https://github.com/nysenate/OpenLegislation/issues)",
         "hasEmail": "mailto:lab@beta.nyc"
       },
       "publisher": {
@@ -109,9 +109,9 @@
         }
       ],
       "provenance": [
-        "Official record: yes, reshaped by BetaNYC (values unchanged).",
+        "BetaNYC modified this data: reshaped it. This copy should not be considered the official record. Official record: Open Legislation API (New York State Senate), https://legislation.nysenate.gov/static/docs/html/index.html",
         "Read-only requests to the Senate's Open Legislation API at the moment you ask. The Senate receives the legislative data from the Legislative Bill Drafting Commission (LBDC) in a raw file format, and Open Legislation cleans it up before publishing it through the API. Needs NYS_LEGISLATION_API_KEY (a free key from the Senate); a server without one cannot reach this source.",
-        "Reshaped by BetaNYC (values unchanged): Passed on as the API returns it, with three additions that change no value: the paging totals the API puts beside a list of results are copied in with the results, each bill gets a link to its page on nysenate.gov, and each law document gets a link to the law on nysenate.gov."
+        "Modified by BetaNYC: Passed on as the API returns it, with three additions that change no value: the paging totals the API puts beside a list of results are copied in with the results, each bill gets a link to its page on nysenate.gov, and each law document gets a link to the law on nysenate.gov."
       ],
       "page": [
         {
@@ -146,7 +146,7 @@
       "identifier": "https://github.com/BetaNYC/nys-openlegislation-mcp/blob/HEAD/DATA-SOURCES.json#corpus",
       "contactPoint": {
         "@type": "Kind",
-        "fn": "BetaNYC (serves this dataset; report errors in the data to New York State Senate: https://github.com/nysenate/OpenLegislation/issues; errors in this server: https://github.com/BetaNYC/nys-openlegislation-mcp/issues)",
+        "fn": "BetaNYC (serves this dataset; report errors in the data to BetaNYC: https://github.com/BetaNYC/nys-openlegislation-mcp/issues; errors in the original records to New York State Senate: https://github.com/nysenate/OpenLegislation/issues)",
         "hasEmail": "mailto:lab@beta.nyc"
       },
       "publisher": {
@@ -197,9 +197,9 @@
         }
       ],
       "provenance": [
-        "Official record: yes, reshaped by BetaNYC (values unchanged).",
+        "BetaNYC modified this data: reshaped it. This copy should not be considered the official record. Official record: Open Legislation API (New York State Senate), https://legislation.nysenate.gov/static/docs/html/index.html",
         "Built on your own machine, not shipped in the package: this repository's scripts download the data from the Open Legislation API (scripts/fetch-data.js once, then scripts/sync.js to pick up changes, both with an API key) and save each item's JSON as the API returned it. Each sync asks for the changes since the last one ended, in New York time as the API expects, and records when it ended. The server then reads that copy with no network call.",
-        "Reshaped by BetaNYC (values unchanged): Each item is the API's own JSON, saved and read back unchanged, with a note on each answer giving the time the copy was last synced. search_members adds each member's chamber and full name, taken from the Senate's own records: the full name is the one on the member's most recent sponsored bill, used for every session, because the member list does not carry it."
+        "Modified by BetaNYC: Each item is the API's own JSON, saved and read back unchanged, with a note on each answer giving the time the copy was last synced. search_members adds each member's chamber and full name, taken from the Senate's own records: the full name is the one on the member's most recent sponsored bill, used for every session, because the member list does not carry it."
       ],
       "page": [
         {

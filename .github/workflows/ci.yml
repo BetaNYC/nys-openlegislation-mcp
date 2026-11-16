@@ -15,7 +15,8 @@ name: CI
 # supports Node 20.x+ only — so the matrix and the floor agree. The tests are offline —
 # dependencies.test.js reads only package.json/package-lock.json,
 # search.test.js and strict-schema.test.js mock `fetch` — so no API key or
-# data/corpus.db is required in CI.
+# data/corpus.db is required in CI. (about-data.test.js builds a throwaway corpus
+# in a temp folder to check the corpus freshness date; it makes no network call.)
 
 on:
   pull_request:
@@ -28,7 +29,9 @@ on:
       - ".github/workflows/ci.yml"
       - "WHATS-CHANGED.md"
       - "CHANGELOG.md"
-      - "scripts/whats_changed.py"
+      - "scripts/**"
+      - "DATA-SOURCES.json"
+      - "data.json"
   push:
     branches: [main]
     paths:
@@ -39,7 +42,9 @@ on:
       - ".github/workflows/ci.yml"
       - "WHATS-CHANGED.md"
       - "CHANGELOG.md"
-      - "scripts/whats_changed.py"
+      - "scripts/**"
+      - "DATA-SOURCES.json"
+      - "data.json"
 
 permissions:
   contents: read
@@ -85,3 +90,47 @@ jobs:
           python-version: "3.12"
       - name: Check WHATS-CHANGED.md
         run: python3 scripts/whats_changed.py check WHATS-CHANGED.md --base-ref "origin/${{ github.base_ref || 'main' }}"
+
+  # BetaNYC's about-data standard (betanyc-ai-workspace platform/system/about-data-standard.md
+  # § 7). scripts/whats_changed.py, scripts/tests/catalog_validate.py, scripts/mcp_shared/ and
+  # src/betanyc-tools.ts are copies of the workspace's canonical files: never edit them here.
+  # 1. DATA-SOURCES.json is valid and every tool the built server lists has a source.
+  # 2. data.json (DCAT-US 3.0) matches DATA-SOURCES.json; rebuild it with the same command
+  #    without --check. 3. DATA-SOURCES.json against its JSON Schema and data.json against the
+  #    vendored DCAT-US 3.0 schema, with pinned validators (CI only, not runtime dependencies).
+  # The release gate (`about-data check --release`, which also refuses the placeholder contact)
+  # runs in release.yml before `npm publish`. It is not run here.
+  about-data:
+    name: About data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+      - name: Build
+        run: npm ci && npm run build
+      - name: The server's tool list
+        run: >-
+          node --input-type=module -e '
+          const { TOOLS } = await import("./dist/tools.js");
+          console.log(JSON.stringify(TOOLS.map((t) => t.name)));
+          ' > "$RUNNER_TEMP/tools.json"
+      - name: DATA-SOURCES.json is valid and explains every tool
+        run: python3 scripts/whats_changed.py about-data check DATA-SOURCES.json --tools-file "$RUNNER_TEMP/tools.json"
+      - name: data.json is current
+        run: python3 scripts/whats_changed.py about-data catalog DATA-SOURCES.json --check
+      - name: Validate against the JSON Schema and DCAT-US 3.0
+        run: |
+          uv run --no-project --with jsonschema==4.26.0 --with referencing==0.37.0 --with rfc3987==1.3.8 \
+            python scripts/tests/catalog_validate.py data-sources DATA-SOURCES.json
+          uv run --no-project --with jsonschema==4.26.0 --with referencing==0.37.0 --with rfc3987==1.3.8 \
+            python scripts/tests/catalog_validate.py dcat data.json

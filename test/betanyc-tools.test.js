@@ -1,6 +1,7 @@
-// whats_changed and about_betanyc, the two tools BetaNYC is adding to each of its MCP servers
-// (betanyc-ai-workspace platform/system/whats-changed-standard.md § 7). They read this repo's
-// WHATS-CHANGED.md, need no API key, and never touch the network.
+// whats_changed, about_betanyc and about_data, the three tools BetaNYC is adding to each of its
+// MCP servers (betanyc-ai-workspace platform/system/whats-changed-standard.md § 7). They read
+// this repo's WHATS-CHANGED.md and DATA-SOURCES.json, need no API key, and never touch the
+// network. about_data has its own tests in about-data.test.js.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -24,8 +25,8 @@ const unreleased = (whatsChanged.match(/^## Unreleased: /gm) ?? []).length;
 
 const textOf = (r) => r.content[0].text;
 
-test("both shared tools are advertised, read-only, strict, with an output schema", () => {
-  for (const name of ["whats_changed", "about_betanyc"]) {
+test("the three shared tools are advertised, read-only, strict, with an output schema", () => {
+  for (const name of ["whats_changed", "about_betanyc", "about_data"]) {
     const t = TOOLS.find((x) => x.name === name);
     assert.ok(t, name);
     assert.equal(t.outputSchema.type, "object", name);
@@ -33,7 +34,7 @@ test("both shared tools are advertised, read-only, strict, with an output schema
     assert.equal(t.inputSchema.type, "object", name);
     assert.equal(t.inputSchema.additionalProperties, false, name);
   }
-  assert.equal(TOOLS.length, 26, "24 Open Legislation tools plus the two shared ones");
+  assert.equal(TOOLS.length, 27, "24 Open Legislation tools plus the three shared ones");
 });
 
 test("whats_changed answers from this repo's WHATS-CHANGED.md without an API key, every entry valid", async () => {
@@ -109,7 +110,7 @@ test("WHATS-CHANGED.md is listed in the package's files", () => {
   assert.ok(pkg.files.includes("WHATS-CHANGED.md"), pkg.files.join(", "));
 });
 
-test("over stdio, the SDK client accepts both answers against their output schemas", async () => {
+test("over stdio, the SDK client accepts the shared answers against their output schemas", async () => {
   // Client.callTool validates structuredContent against the outputSchema from tools/list
   // and throws when it does not match, so this is the MCP contract checked end to end.
   // The server needs a key or a corpus to start; a placeholder key and no corpus give
@@ -120,7 +121,7 @@ test("over stdio, the SDK client accepts both answers against their output schem
   await client.connect(transport);
   try {
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 26);
+    assert.equal(tools.length, 27);
     const wc = await client.callTool({ name: "whats_changed", arguments: { limit: 3 } });
     assert.equal(wc.structuredContent.returned, 3);
     const about = await client.callTool({ name: "about_betanyc", arguments: {} });

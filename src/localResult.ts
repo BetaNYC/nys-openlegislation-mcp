@@ -15,6 +15,7 @@
  */
 
 import { getSyncState } from "./db.js";
+import { syncedAtWithZone } from "./syncTime.js";
 
 /** True when a local result is empty (no rows) and should fall through to live. */
 export function isEmptyLocalResult(result: unknown): boolean {
@@ -31,7 +32,9 @@ export function isEmptyLocalResult(result: unknown): boolean {
 async function syncedAt(): Promise<string> {
   try {
     const state = await getSyncState();
-    if (state?.last_synced_at) return state.last_synced_at;
+    // With its zone (2.7.0): a New York offset, or Z for a corpus synced by an older version.
+    const shown = syncedAtWithZone(state?.last_synced_at);
+    if (shown) return shown;
   } catch {
     // never fail a request over provenance
   }

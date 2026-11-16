@@ -69,10 +69,11 @@ export async function callTool(
   name: string,
   args: unknown
 ): Promise<CallToolResult> {
-  // whats_changed and about_betanyc (BetaNYC standard tools): they read this repo's
-  // WHATS-CHANGED.md and answer about the server, not from Open Legislation data, so they
-  // need no API key and carry no data disclaimer.
-  if (betanyc.handles(name)) return betanyc.call(name, args);
+  // whats_changed, about_betanyc and about_data (BetaNYC standard tools): they read this repo's
+  // WHATS-CHANGED.md and DATA-SOURCES.json and answer about the server, not from Open
+  // Legislation data, so they need no API key and carry no data disclaimer. callAsync, because
+  // about_data's corpus freshness hook reads the corpus asynchronously.
+  if (betanyc.handles(name)) return betanyc.callAsync(name, args);
 
   /**
    * Wrap a local corpus result into a tool response, or return null to fall

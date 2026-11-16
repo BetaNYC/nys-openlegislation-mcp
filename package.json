@@ -1,6 +1,6 @@
 {
   "name": "@betanyc/nys-openlegislation-mcp",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "mcpName": "io.github.BetaNYC/nys-openlegislation-mcp",
   "description": "MCP server for New York State legislation via the NYS Open Legislation API",
   "keywords": [
@@ -40,7 +40,9 @@
   },
   "files": [
     "dist",
-    "WHATS-CHANGED.md"
+    "WHATS-CHANGED.md",
+    "DATA-SOURCES.json",
+    "data.json"
   ],
   "scripts": {
     "build": "tsc",

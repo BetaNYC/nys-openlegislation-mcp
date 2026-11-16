@@ -21,6 +21,7 @@ import { mkdirSync, existsSync } from "fs";
 import { START_OFFSET, nextOffset, isLastPage, basePrintNo } from "./lib/api-helpers.js";
 import { flattenLawTree } from "./lib/law-tree.js";
 import { backfillMemberFullNames, ensureMemberFullNameColumn } from "./lib/members.js";
+import { initialWatermark, rangeEnd } from "./lib/ny-time.js";
 
 let Database;
 try {
@@ -600,6 +601,8 @@ console.log(`  DB: ${DB_PATH}`);
 console.log();
 
 const startTime = Date.now();
+// Noted before loading anything: New York now minus 2 minutes (keeping_up.html).
+const LOAD_START = rangeEnd(new Date(startTime));
 
 if (TYPES.has("bills"))       await fetchBills();
 if (TYPES.has("laws"))        await fetchLaws();
@@ -616,9 +619,11 @@ if (TYPES.has("bills") || TYPES.has("members")) {
   console.log(`\n👤 Member full names: ${filled} filled, ${missing} without a sponsored bill`);
 }
 
-// Persist config to sync_state
-const now = new Date().toISOString().split(".")[0]; // ISO 8601 with T — matches sync.js expectation
-setSyncState.run("last_synced_at", now);
+// Persist config to sync_state. The watermark is the time noted before the load started, so
+// the first sync picks up anything that changed during it (keeping_up.html, "The initial
+// load"); a later, often partial, load keeps an existing watermark (scripts/lib/ny-time.js).
+const existingWatermark = db.prepare("SELECT value FROM sync_state WHERE key = 'last_synced_at'").get()?.value;
+setSyncState.run("last_synced_at", initialWatermark(existingWatermark, LOAD_START));
 setSyncState.run("start_year", String(START_YEAR));
 setSyncState.run("include_law_text", INCLUDE_LAW_TEXT ? "1" : "0");
 setSyncState.run("include_transcript_text", INCLUDE_TRANSCRIPT_TEXT ? "1" : "0");

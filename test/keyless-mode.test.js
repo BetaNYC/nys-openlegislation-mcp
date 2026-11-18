@@ -233,6 +233,9 @@ test(
     );
     assert.match(payload.freshness, /sync/i, "and must say a re-sync is what refreshes it");
     assert.equal(payload.title, "A fixture bill", "the actual data must still be served");
+    // Every data answer names its source, links to it and says how current it is (#33, #34):
+    // for the local copy, the copy's sync time.
+    assert.match(text, /^Source: .*New York State Senate.*\. As of 2026-07-21T10:30:07Z \(the date of the copy this server answers from\)\. Link: https:\/\/legislation\.nysenate\.gov\/$/m);
   }
 );
 

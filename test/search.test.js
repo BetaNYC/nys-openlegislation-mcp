@@ -121,10 +121,12 @@ test("unknown type fails loudly with the supported list, no fetch", async () => 
   assert.strictEqual(calls.length, 0);
 });
 
-test("passes limit and offset through as query params", async () => {
+test("passes limit through, and offset as the API's 1-based position", async () => {
+  // The tools' offset counts from 0 (skip 5 results); the API's counts from 1 (start at the
+  // 6th). Sending 5 unchanged repeated a result on every page (#36).
   const calls = installFetchMock();
   await search(API_KEY, "tourism", "transcripts", undefined, 10, 5);
   const url = new URL(calls[0]);
   assert.strictEqual(url.searchParams.get("limit"), "10");
-  assert.strictEqual(url.searchParams.get("offset"), "5");
+  assert.strictEqual(url.searchParams.get("offset"), "6");
 });

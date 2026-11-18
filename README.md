@@ -284,6 +284,8 @@ NYS legislative sessions run in two-year cycles beginning in odd-numbered years.
 
 Results are sourced from the NYS Open Legislation API, maintained by the New York State Senate. Bill text, status, vote records, and law content reflect official legislative data but may be subject to correction or amendment. Verify critical information at [legislation.nysenate.gov](https://legislation.nysenate.gov).
 
+Every data answer ends with the same few lines: for a list, which results it shows, of how many when the API says, and the `offset` for the next page; then a source line naming the Open Legislation API and the New York State Senate, how current the data is (the time it was fetched, or for the local corpus the time the copy was last synced), and a link to [legislation.nysenate.gov](https://legislation.nysenate.gov/); then the caveat above. `offset` counts from 0 (the number of results to skip) in every tool, live or local. Each list tool has a default `limit` and a maximum, stated in its description; a larger `limit` is refused.
+
 ---
 
 ## Tests

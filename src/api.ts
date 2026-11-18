@@ -5,17 +5,12 @@ import { getJson } from "./http.js";
 
 const BASE_URL = "https://legislation.nysenate.gov/api/3";
 
-// ─── Disclaimer ──────────────────────────────────────────────────────────────
+// ─── Caveat ──────────────────────────────────────────────────────────────────
 
-export const DISCLAIMER =
-  "\n\n---\n" +
-  "Data sourced from the NYS Open Legislation API, maintained by the New York State Senate. " +
-  "Bill text, status, vote records, and law content reflect official legislative data but may " +
-  "be subject to correction or amendment. Verify critical information at legislation.nysenate.gov.";
-
-export function withDisclaimer(json: unknown): string {
-  return JSON.stringify(json, null, 2) + DISCLAIMER;
-}
+/** The last line of every data answer, after its source line (handlers.ts `answer`). */
+export const CAVEAT =
+  "Bill text, status, vote records and law content are the Senate's official legislative data, " +
+  "but may be corrected or amended. Verify critical information at legislation.nysenate.gov.";
 
 // ─── Response envelope ────────────────────────────────────────────────────────
 
@@ -97,7 +92,10 @@ export function buildUrl(
   const url = new URL(`${BASE_URL}${path}`);
   url.searchParams.set("key", apiKey);
   for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, String(v));
+    // This server's `offset` counts from 0, like the local copy's SQL OFFSET; the API's counts
+    // from 1 ("Position of the first item to return, starting at 1", API Conventions, Paging).
+    // Passed unchanged, offset 0 and 1 were the same page and paging repeated a result (#36).
+    url.searchParams.set(k, String(k === "offset" ? Number(v) + 1 : v));
   }
   return url.toString();
 }

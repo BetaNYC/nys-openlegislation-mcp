@@ -67,10 +67,31 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
 - The API key is redacted from every error (#37), raw and URL-encoded. The API takes it
   only as the `key` query parameter (API Conventions, "Base URL and API key"), so it
   stays there. `test/upstream.test.js` covers all three.
+- Every data answer names its source and how current it is (#33, #34): after the JSON,
+  a line from the shared `provenance()`, "Source: Open Legislation API (New York State
+  Senate). As of … Link: https://legislation.nysenate.gov/", with the retrieval time for
+  a live call and the corpus's `last_synced_at` for a local one ("As of: unknown" when
+  the copy has no readable sync time). It replaces the disclaimer's "Data sourced from"
+  sentence; the caveat to verify at legislation.nysenate.gov stays.
+- Lists (#35): every list tool's `limit` now has a hard maximum, refused above it
+  (`search_bills`, `search_members`, `get_committee_meetings`, `search`: 100;
+  `list_members`, `list_committees`, `list_calendars`, `list_agendas`, both transcript
+  lists: 200; `list_bills`, `get_bill_updates`, `get_updates`: 500), and must be a whole
+  number of at least 1; `offset` a whole number of at least 0. Defaults are unchanged.
+  Each list answer says which results it shows, of how many (live answers carry the
+  API's `total`), and the `offset` for the next page; the local copy has no total, so a
+  full page says more may be available. `test/answers.test.js` checks it on a
+  25,520-bill fixture.
 - The shared tools are dispatched with `callAsync`, because the corpus freshness
   hook reads the local copy asynchronously.
 
 ### Fixed
+
+- **Live paging repeated one result per page (since 1.0.0, #36).** The tools'
+  `offset` counts from 0, but the API's counts from 1 (API Conventions, "Paging"), and
+  it was sent unchanged: `offset: 0` and `offset: 1` returned the same first page, and
+  paging by `limit` returned the last result of each page again first on the next. Live
+  calls now send `offset + 1`. Answers from the local copy were not affected.
 
 - **The local copy's sync missed changes after every sync (since 2.0.0).** The
   Open Legislation API reads every date and time as New York local time with no

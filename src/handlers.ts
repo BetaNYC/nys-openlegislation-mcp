@@ -11,8 +11,11 @@ import {
   withDisclaimer,
   currentSessionYear,
   MissingApiKeyError,
+  ApiFailureError,
   type ApiKey,
 } from "./api.js";
+import { UpstreamError, timing } from "./http.js";
+import { toolError } from "./betanyc-tools.js";
 import { parseArgs, betanyc } from "./tools.js";
 import {
   getBill,
@@ -434,26 +437,50 @@ export async function callTool(
       }
 
       default:
-        return {
-          content: [{ type: "text", text: `Unknown tool: ${name}` }],
-          isError: true,
-        };
+        return toolError(`Unknown tool: ${name}. Call tools/list to see the tools this server has.`);
     }
   } catch (err) {
-    if (err instanceof MissingApiKeyError) {
-      // Named, not a generic `Error:` — the caller needs to know which tool is
-      // unavailable and that the fix is configuration, not a retry.
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Tool '${name}' requires the live NYS Open Legislation API. ${err.message}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-    const message = err instanceof Error ? err.message : String(err);
-    return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
+    // The key goes in the request URL (the API takes it only as the `key` query parameter), so
+    // it is redacted from everything an error passes on (#37).
+    return errorResult(name, err, apiKey);
   }
+}
+
+const API = "The Open Legislation API";
+
+/** A failure as one plain sentence, what to try, and at most 500 characters of upstream body
+ * (shared toolError), with the API key redacted (#37, #38). */
+export function errorResult(name: string, err: unknown, apiKey: ApiKey): CallToolResult {
+  const secrets = [apiKey];
+  if (err instanceof MissingApiKeyError) {
+    // Named, not a generic `Error:`: the caller needs to know which tool is unavailable and
+    // that the fix is configuration, not a retry. Static text, so not passed through toolError,
+    // whose "Error: " prefix would read as the generic failure this message replaced.
+    return { content: [{ type: "text", text: `Tool '${name}' requires the live NYS Open Legislation API. ${err.message}` }], isError: true };
+  }
+  if (err instanceof z.ZodError) {
+    const issues = err.issues.map((i) => `${i.path.join(".") || "arguments"}: ${i.message}`).join("; ");
+    return toolError(`Invalid arguments for ${name}: ${issues}. Fix them and call ${name} again.`, { secrets });
+  }
+  if (err instanceof ApiFailureError) {
+    return toolError(`${API} reported a failure for ${name}. Check the arguments and try again.`, { upstreamBody: err.message, secrets });
+  }
+  if (err instanceof UpstreamError) {
+    const body = { upstreamBody: err.body, secrets };
+    if (err.kind === "timeout") {
+      return toolError(`${API} did not answer within ${timing.timeoutMs / 1000} seconds. Try again in a minute; a smaller limit may help.`, { secrets });
+    }
+    if (err.kind === "network") {
+      return toolError(`Could not reach the Open Legislation API (${err.message}). Check the network connection and try again.`, { secrets });
+    }
+    const s = err.status ?? 0;
+    if (s === 400) return toolError(`${API} did not accept this request (HTTP 400). Check the arguments, such as the print number, session year, dates or search syntax, and try again.`, body);
+    if (s === 401) return toolError(`${API} refused the API key (HTTP 401). Check that NYS_LEGISLATION_API_KEY holds a valid key from https://legislation.nysenate.gov/register.`, body);
+    if (s === 404) return toolError(`${API} has nothing at that address (HTTP 404). Check the identifier and the session year or year; a list or search tool can find the right one.`, body);
+    if (s === 429) return toolError(`${API}'s rate limit was reached (HTTP 429). Try again in ${err.retryAfterSec ?? 10} seconds.`, body);
+    if (s >= 500) return toolError(`${API} had a problem on its side (HTTP ${s}). Try again in a few minutes.`, body);
+    return toolError(`${API} answered HTTP ${s}. Check the arguments and try again.`, body);
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return toolError(`${name} failed: ${message}`, { secrets });
 }

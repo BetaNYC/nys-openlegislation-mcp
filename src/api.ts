@@ -1,6 +1,8 @@
 // Base API client for the NYS Open Legislation API v2.0
 // https://legislation.nysenate.gov/static/docs/html/index.html
 
+import { getJson } from "./http.js";
+
 const BASE_URL = "https://legislation.nysenate.gov/api/3";
 
 // ─── Disclaimer ──────────────────────────────────────────────────────────────
@@ -100,15 +102,19 @@ export function buildUrl(
   return url.toString();
 }
 
-export async function apiFetch<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`NYS Open Legislation API error ${res.status}: ${res.statusText}${body ? " — " + body : ""}`);
+/** The API answered 200 but with `success: false`. */
+export class ApiFailureError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ApiFailureError";
   }
-  const data = (await res.json()) as ApiEnvelope<T>;
+}
+
+/** One API request (timeout, User-Agent, pacing and retry in http.ts), unwrapped from its envelope. */
+export async function apiFetch<T>(url: string): Promise<T> {
+  const data = (await getJson(url)) as ApiEnvelope<T>;
   if (!data.success) {
-    throw new Error(`API returned failure: ${data.message}`);
+    throw new ApiFailureError(data.message || "no message");
   }
   // Paginated responses carry their totals on the envelope; returning only
   // `result` used to drop them, so a caller saw 25 items and no hint of 600 more.

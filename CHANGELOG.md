@@ -53,6 +53,20 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
   fails on a tool without them.
 - `test/tool-list.test.js` also caps the tool list plus the server instructions at
   28,500 characters (`toolListSize`; measured 28,077 on 2026-11-18, #39).
+- Requests to the Open Legislation API go through `src/http.ts` (#32), following the
+  API's rate-limit rules (per key from December 1, 2026: 10 requests per second, 4 in
+  progress): one request at a time, at least 100 ms apart; a 30 s timeout and no
+  resend after it; at most two retries, only on 429 and 503, waiting at least
+  `Retry-After` (whole seconds) plus jitter, or 1 s then 2 s without it; a
+  `Retry-After` over 30 s is reported, not waited out. A User-Agent names the
+  package and version. Before, `apiFetch` called `fetch(url)` with none of these.
+- Errors (#38): every failure is `isError: true` with a plain sentence and what to try
+  (by HTTP status, timeout, network failure, `success: false`, bad arguments), built
+  with the shared `toolError`: at most 500 characters of the upstream body, no stack
+  lines. Argument errors name the field instead of dumping zod's JSON.
+- The API key is redacted from every error (#37), raw and URL-encoded. The API takes it
+  only as the `key` query parameter (API Conventions, "Base URL and API key"), so it
+  stays there. `test/upstream.test.js` covers all three.
 - The shared tools are dispatched with `callAsync`, because the corpus freshness
   hook reads the local copy asynchronously.
 

@@ -39,6 +39,8 @@ The server refuses to start only when **both** the key and the corpus are missin
 
 Bill URLs returned by this server point to the public [nysenate.gov](https://www.nysenate.gov/legislation) website — no login required.
 
+**How the server talks to the API.** The key is read only from `NYS_LEGISLATION_API_KEY`. The API accepts it only as the `key` query parameter, so it is part of each request URL; the server removes it from every error message it returns. Requests follow the API's [rate-limit guidance](https://legislation.nysenate.gov/static/docs/html/getting_started.html#rate-limits) (limits per key from December 1, 2026): one request at a time, at least 0.1 seconds apart; a 30-second timeout, with no resend of a slow request; at most two retries, only after HTTP 429 or 503, waiting at least as long as `Retry-After` asks. Each request sends a User-Agent naming this package and its version. The server never polls in the background. Errors are a plain sentence saying what went wrong and what to try, with at most 500 characters of the API's own reply (`src/http.ts`, `src/handlers.ts`).
+
 ---
 
 ## Installation

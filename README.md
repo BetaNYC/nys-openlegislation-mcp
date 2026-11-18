@@ -171,6 +171,11 @@ parameters that tool accepts. This is deliberate: silently dropping a filter
 returns real, correctly-sourced data that answers a *different* question, and
 nothing in the response would signal it.
 
+Every tool is marked read-only (`readOnlyHint: true`); none changes anything. The
+Open Legislation tools are also marked `openWorldHint: true`, since they may call
+the live API; the three tools under "About this server" read only this package's
+own files.
+
 ### Bills
 
 | Tool | Description |

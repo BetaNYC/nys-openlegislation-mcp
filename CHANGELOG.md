@@ -41,11 +41,18 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
 ### Changed
 
 - 27 tools instead of 26.
-- Shared module 1.4.0: `src/betanyc-tools.ts`, `scripts/whats_changed.py` and the
-  about-data validator kit (`scripts/tests/catalog_validate.py`,
-  `scripts/mcp_shared/data-sources.schema.json`) are BetaNYC's shared module 1.4.0,
-  all copied in unchanged (`whats_changed_drift.py compare`: CURRENT). Never
-  edit the copies.
+- Shared module 1.5.0: `src/betanyc-tools.ts` is BetaNYC's shared module 1.5.0, and
+  `scripts/whats_changed.py` and the about-data validator kit
+  (`scripts/tests/catalog_validate.py`, `scripts/mcp_shared/data-sources.schema.json`)
+  are those of `whats_changed.py` 1.4.1, all copied in unchanged
+  (`whats_changed_drift.py scan`: CURRENT). Never edit the copies. 1.5.0 adds helpers
+  for a server's own tools and changes none of the three shared tools (#30).
+- Every tool now declares `annotations` (`annotateTools`, #31): `readOnlyHint: true`,
+  a `title`, and `openWorldHint` (true for the 24 Open Legislation tools, which may
+  call the live API; false for the three shared tools). `test/tool-list.test.js`
+  fails on a tool without them.
+- `test/tool-list.test.js` also caps the tool list plus the server instructions at
+  28,500 characters (`toolListSize`; measured 28,077 on 2026-11-18, #39).
 - The shared tools are dispatched with `callAsync`, because the corpus freshness
   hook reads the local copy asynchronously.
 

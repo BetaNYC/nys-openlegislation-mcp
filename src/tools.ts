@@ -12,7 +12,7 @@
 import { z } from "zod";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { createRequire } from "node:module";
-import { BETANYC_INSTRUCTIONS, createBetanycTools } from "./betanyc-tools.js";
+import { BETANYC_INSTRUCTIONS, annotateTools, createBetanycTools } from "./betanyc-tools.js";
 import { getSyncState, hasLocalCorpus } from "./db.js";
 import { syncedAtWithZone } from "./syncTime.js";
 
@@ -75,7 +75,9 @@ export const SERVER_INSTRUCTIONS =
   "from the New York State Senate's Open Legislation API, by BetaNYC. " +
   BETANYC_INSTRUCTIONS;
 
-export const TOOLS: Tool[] = [
+/** The Open Legislation tools. Each can call the live API (when the local copy has no answer,
+ * or always, for the live-only tools), so each is open-world. */
+const DOMAIN_TOOLS: Tool[] = [
   // ── Bills ─────────────────────────────────────────────────────────────────
   {
     name: "search_bills",
@@ -626,9 +628,19 @@ export const TOOLS: Tool[] = [
       required: ["term"],
     },
   },
-  // What changed in this server, who built it, and where its data comes from (BetaNYC standard tools).
-  ...betanyc.tools,
 ];
+
+/** Every tool, annotated (shared module 1.5.0): all only read (readOnlyHint), the Open Legislation
+ * tools may call the live API (openWorldHint true), and the three shared tools, which answer from
+ * this repo's own files, carry their own annotations. annotateTools throws at startup on a gap. */
+export const TOOLS: Tool[] = annotateTools(
+  [
+    ...DOMAIN_TOOLS,
+    // What changed in this server, who built it, and where its data comes from (BetaNYC standard tools).
+    ...betanyc.tools,
+  ],
+  Object.fromEntries(DOMAIN_TOOLS.map((t) => [t.name, true])),
+);
 
 /**
  * Parse tool arguments against a strict schema.

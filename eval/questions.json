@@ -1,0 +1,207 @@
+{
+  "_readme": [
+    "Fixed question set, written 2026-11-18 before scoring (#40). Each question is one a person would ask, with a known right answer.",
+    "Runs offline: each step's `fixture` is the `result` (plus any paging fields) the Open Legislation API returned for that record, copied from the example responses in the API's own documentation (`fixture_source`), trimmed to the fields the question needs. A step with no fixture must not reach the API.",
+    "So the set measures the server, not the model: does the tool send the documented request, and does its answer carry the right fact, the paging line and the source line. It does not measure whether a model picks the right tool.",
+    "Checks: `request` (path and query parameters of the one API request), `json` (dotted path in the answer's JSON equals a value), `text` (a regular expression the answer text must match), `error` (true when the answer must be an error).",
+    "Invariants checked on every answer: a data answer ends with a source line naming the New York State Senate, with a link and an as-of; no answer contains the API key.",
+    "Run: npm run eval (results are written to eval/runs/). npm test runs the same set and fails if any question fails."
+  ],
+  "questions": [
+    {
+      "id": "Q01",
+      "q": "Who sponsored Senate bill S2180 in the 2013 session?",
+      "answer": "Martin J. Golden (Senate district 22).",
+      "steps": [
+        {
+          "tool": "get_bill",
+          "args": { "print_no": "S2180", "session_year": 2013 },
+          "fixture_source": "https://legislation.nysenate.gov/static/docs/html/bills.html#get-a-single-bill",
+          "fixture": { "result": { "basePrintNo": "S2180", "session": 2013, "printNo": "S2180", "title": "Provides enhanced..", "sponsor": { "member": { "memberId": 422, "shortName": "GOLDEN", "sessionYear": 2013, "fullName": "Martin J. Golden", "districtCode": 22 }, "budget": false, "rules": false }, "status": { "statusType": "IN_SENATE_COMM", "statusDesc": "In Senate Committee", "actionDate": "2014-06-20", "committeeName": "RULES", "billCalNo": null } } },
+          "check": {
+            "request": { "path": "/api/3/bills/2013/S2180" },
+            "json": { "sponsor.member.fullName": "Martin J. Golden", "sponsor.member.districtCode": 22, "url": "https://www.nysenate.gov/legislation/bills/2013/S2180" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "Q02",
+      "q": "Where is S2180 (2013) now?",
+      "answer": "In Senate Committee, the Rules committee, as of 2014-06-20.",
+      "steps": [
+        {
+          "tool": "get_bill",
+          "args": { "print_no": "s2180", "session_year": 2013 },
+          "fixture_source": "https://legislation.nysenate.gov/static/docs/html/bills.html#get-a-single-bill",
+          "fixture": { "result": { "basePrintNo": "S2180", "session": 2013, "printNo": "S2180", "status": { "statusType": "IN_SENATE_COMM", "statusDesc": "In Senate Committee", "actionDate": "2014-06-20", "committeeName": "RULES", "billCalNo": null } } },
+          "check": {
+            "json": { "status.statusDesc": "In Senate Committee", "status.committeeName": "RULES", "status.actionDate": "2014-06-20" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "Q03",
+      "q": "Is there an Assembly bill identical to S2180 (2013)?",
+      "answer": "Yes: A2098, its same-as bill in the 2013 session.",
+      "steps": [
+        {
+          "tool": "get_bill",
+          "args": { "print_no": "S2180", "session_year": 2013 },
+          "fixture_source": "https://legislation.nysenate.gov/static/docs/html/bills.html#get-a-single-bill",
+          "fixture": { "result": { "basePrintNo": "S2180", "session": 2013, "printNo": "S2180", "amendments": { "items": { "": { "basePrintNo": "S2180", "session": 2013, "version": "", "sameAs": { "items": [ { "basePrintNo": "A2098", "session": 2013, "printNo": "A2098", "version": "" } ], "size": 1 }, "lawSection": "Penal Law" } }, "size": 1 } } },
+          "check": {
+            "json": { "amendments.items..sameAs.items.0.basePrintNo": "A2098", "amendments.items..lawSection": "Penal Law" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "Q04",
+      "q": "How did Senator Hannon vote when the Rules committee took up S2180 in 2013?",
+      "answer": "Excused (EXC), in the committee vote of 2013-04-22.",
+      "steps": [
+        {
+          "tool": "get_bill_votes",
+          "args": { "print_no": "S2180", "session_year": 2013 },
+          "fixture_source": "https://legislation.nysenate.gov/static/docs/html/bills.html#get-a-single-bill",
+          "fixture": { "result": { "basePrintNo": "S2180", "session": 2013, "votes": { "items": [ { "version": "", "voteType": "COMMITTEE", "voteDate": "2013-04-22", "committee": { "chamber": "SENATE", "name": "Rules" }, "memberVotes": { "items": { "EXC": { "items": [ { "memberId": 424, "shortName": "HANNON", "sessionYear": 2013 } ], "size": 1 } }, "size": 1 } } ], "size": 1 } } },
+          "check": {
+            "request": { "path": "/api/3/bills/2013/S2180", "params": { "view": "no_fulltext" } },
+            "json": { "items.0.voteDate": "2013-04-22", "items.0.committee.name": "Rules", "items.0.memberVotes.items.EXC.items.0.shortName": "HANNON" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "Q05",
+      "q": "Show me the second page of bills from the 2013 session, 50 at a time.",
+      "answer": "Bills 51 to 100 of 25,568; the next page starts at offset 100. The API's own example asks offset=51 for this page.",
+      "steps": [
+        {
+          "tool": "list_bills",
+          "args": { "session_year": 2013, "limit": 50, "offset": 50 },
+          "fixture_source": "https://legislation.nysenate.gov/static/docs/html/bills.html#get-a-list-of-bills",
+          "fixture": { "total": 25568, "offsetStart": 51, "offsetEnd": 100, "limit": 50, "result": { "items": "50 bills", "size": 50 } },
+          "check": {
+            "request": { "path": "/api/3/bills/2013", "params": { "limit": "50", "offset": "51" } },
+            "json": { "total": 25568, "size": 50 },
+            "text": "^Showing results 51–100 of 25568\\. For the next 50, call again with offset 100\\.$"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Q06",
+      "q": "What is Article 2 of the Education Law, and what link should I cite?",
+      "answer": "\"Dignity For All Students\"; cite https://www.nysenate.gov/legislation/laws/EDN/A2.",
+      "steps": [
+        {
+          "tool": "get_law_section",
+          "args": { "law_id": "EDN", "location_id": "A2" },
+          "fixture_source": "https://legislation.nysenate.gov/static/docs/html/laws.html",
+          "fixture": { "result": { "lawId": "EDN", "lawName": "Education", "locationId": "A2", "title": "Dignity For All Students", "docType": "ARTICLE", "docLevelId": "2", "activeDate": "2019-05-03", "text": "ARTICLE 2 (text truncated for brevity)" } },
+          "check": {
+            "request": { "path": "/api/3/laws/EDN/A2" },
+            "json": { "title": "Dignity For All Students", "nysenate_url": "https://www.nysenate.gov/legislation/laws/EDN/A2" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "Q07",
+      "q": "Which bills changed on the morning of February 13, 2019, between 8:00 and 10:55:48?",
+      "answer": "The bill update feed for that range, from the documented route /bills/updates/{from}/{to}, newest first.",
+      "steps": [
+        {
+          "tool": "get_bill_updates",
+          "args": { "from": "2019-02-13T08:00:00", "to": "2019-02-13T10:55:48" },
+          "fixture_source": "https://legislation.nysenate.gov/static/docs/html/bills.html#get-a-list-of-bill-updates",
+          "fixture": { "total": 74, "offsetStart": 1, "offsetEnd": 50, "limit": 50, "result": { "items": "50 updates", "size": 50 } },
+          "check": {
+            "request": { "path": "/api/3/bills/updates/2019-02-13T08%3A00%3A00/2019-02-13T10%3A55%3A48", "params": { "order": "desc" } },
+            "text": "^Showing results 1–50 of 74\\. For the next 24, call again with offset 50\\.$"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Q08",
+      "q": "Is member 1468 a senator? Look them up in the Senate.",
+      "answer": "No: member 1468 is Jessica Gonzalez-Rojas, in the Assembly. The tool says so as an error instead of returning her as a senator.",
+      "steps": [
+        {
+          "tool": "get_member",
+          "args": { "member_id": 1468, "chamber": "senate", "session_year": 2025 },
+          "fixture_source": "test/issues-17-20-21.test.js MEMBER_GET (observed from the live API, 2026-10-11, issue #17)",
+          "fixture": { "result": { "memberId": 1468, "chamber": "ASSEMBLY", "incumbent": true, "fullName": "Jessica Gonzalez-Rojas", "shortName": "GONZALEZ-ROJAS" } },
+          "check": {
+            "error": true,
+            "text": "ASSEMBLY[\\s\\S]*Gonzalez-Rojas|Gonzalez-Rojas[\\s\\S]*ASSEMBLY"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Q09",
+      "q": "Which state senator named Gonzalez served in the 2025 session, and for which district?",
+      "answer": "Kristen Gonzalez, Senate district 59.",
+      "steps": [
+        {
+          "tool": "search_members",
+          "args": { "term": "Gonzalez", "chamber": "senate", "session_year": 2025 },
+          "fixture_source": "test/issues-17-20-21.test.js MEMBER_SEARCH (observed from the live API, 2026-10-11, issue #17)",
+          "fixture": { "total": 1, "result": { "items": [ { "memberId": 1513, "chamber": "SENATE", "incumbent": true, "fullName": "Kristen Gonzalez", "shortName": "GONZALEZ", "sessionYear": 2025, "districtCode": 59 } ], "size": 1 } },
+          "check": {
+            "request": { "path": "/api/3/members/2025/search", "params": { "term": "(Gonzalez) AND chamber:SENATE" } },
+            "json": { "items.0.fullName": "Kristen Gonzalez", "items.0.districtCode": 59, "items.0.chamber": "SENATE" },
+            "text": "^Showing results 1–1 of 1: the last page\\.$"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Q10",
+      "q": "How many bills in the 2025 session mention lobbying?",
+      "answer": "95, from a search scoped to the 2025 session (an unscoped search returned 616 across sessions, issue #21).",
+      "steps": [
+        {
+          "tool": "search_bills",
+          "args": { "term": "lobbying", "session_year": 2025 },
+          "fixture_source": "WHATS-CHANGED.md, 2026-10-11 entry (issue #21: the 2025 session has 95)",
+          "fixture": { "total": 95, "offsetStart": 1, "offsetEnd": 25, "limit": 25, "result": { "items": "25 search results", "size": 25 } },
+          "check": {
+            "request": { "path": "/api/3/bills/2025/search", "params": { "term": "lobbying", "limit": "25", "offset": "1" } },
+            "text": "^Showing results 1–25 of 95\\. For the next 25, call again with offset 25\\.$"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Q11",
+      "q": "Search resolutions honoring firefighters.",
+      "answer": "Resolutions are searched with type 'bills'; the tool says so instead of calling a route that does not exist.",
+      "steps": [
+        {
+          "tool": "search",
+          "args": { "term": "firefighters", "type": "resolutions" },
+          "check": { "error": true, "text": "type: \"bills\"" }
+        }
+      ]
+    },
+    {
+      "id": "Q12",
+      "q": "Without an API key, show the votes on S2180 (2013).",
+      "answer": "Not possible offline: the tool names itself, says it needs NYS_LEGISLATION_API_KEY and where to get one, and makes no request.",
+      "key": null,
+      "steps": [
+        {
+          "tool": "get_bill_votes",
+          "args": { "print_no": "S2180", "session_year": 2013 },
+          "check": { "error": true, "text": "get_bill_votes[\\s\\S]*NYS_LEGISLATION_API_KEY[\\s\\S]*legislation\\.nysenate\\.gov/register" }
+        }
+      ]
+    }
+  ]
+}

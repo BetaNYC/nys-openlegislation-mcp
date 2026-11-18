@@ -22,9 +22,31 @@ test("every tool is annotated: read-only, with openWorldHint and a title", () =>
 // measure). Text several tools share belongs once in the instructions, not in each description.
 // Raise the budget only on purpose, with a dated line here saying why.
 // 2026-11-18: measured 28,077 characters (27 tools, annotations added); budget set just above.
+// 2026-11-18: 28,121 after the shared conventions moved into the instructions (#42); budget unchanged.
 const BUDGET_CHARS = 28_500;
 
 test("tool definitions plus server instructions stay within the size budget", () => {
   const size = toolListSize(TOOLS, SERVER_INSTRUCTIONS);
   assert.ok(size <= BUDGET_CHARS, `tools/list JSON + instructions is ${size} characters, over the ${BUDGET_CHARS} budget`);
+});
+
+// Text several tools share is said once, in the server instructions (#42).
+test("shared guidance lives once in the server instructions, not in each tool", async () => {
+  const { BETANYC_INSTRUCTIONS } = await import("../dist/betanyc-tools.js");
+  assert.ok(SERVER_INSTRUCTIONS.endsWith(BETANYC_INSTRUCTIONS), "the shared about_data paragraph is kept");
+  for (const said of ["ElasticSearch syntax", "odd year a two-year session starts", "the number of results to skip", "Every data answer ends with its source"]) {
+    assert.ok(SERVER_INSTRUCTIONS.includes(said), `instructions say: ${said}`);
+  }
+  const everyText = (t) => [t.description, ...Object.values(t.inputSchema.properties ?? {}).map((p) => p.description ?? "")].join(" ");
+  for (const t of TOOLS) {
+    // The phrases moved out of the descriptions must not creep back in.
+    assert.doesNotMatch(everyText(t), /boolean operators|odd-numbered|Pagination offset/, t.name);
+  }
+  const seen = new Map();
+  for (const t of TOOLS) {
+    for (const s of t.description.split(/(?<=\.)\s+/).filter((x) => x.length >= 30)) {
+      assert.ok(!seen.has(s), `"${s}" is in both ${seen.get(s)} and ${t.name}: say it once in the instructions`);
+      seen.set(s, t.name);
+    }
+  }
 });

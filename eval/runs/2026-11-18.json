@@ -1,0 +1,80 @@
+{
+  "run_at": "2026-11-18T18:27:30.557Z",
+  "version": "2.7.0",
+  "passed": 12,
+  "total": 12,
+  "results": [
+    {
+      "id": "Q01",
+      "q": "Who sponsored Senate bill S2180 in the 2013 session?",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q02",
+      "q": "Where is S2180 (2013) now?",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q03",
+      "q": "Is there an Assembly bill identical to S2180 (2013)?",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q04",
+      "q": "How did Senator Hannon vote when the Rules committee took up S2180 in 2013?",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q05",
+      "q": "Show me the second page of bills from the 2013 session, 50 at a time.",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q06",
+      "q": "What is Article 2 of the Education Law, and what link should I cite?",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q07",
+      "q": "Which bills changed on the morning of February 13, 2019, between 8:00 and 10:55:48?",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q08",
+      "q": "Is member 1468 a senator? Look them up in the Senate.",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q09",
+      "q": "Which state senator named Gonzalez served in the 2025 session, and for which district?",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q10",
+      "q": "How many bills in the 2025 session mention lobbying?",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q11",
+      "q": "Search resolutions honoring firefighters.",
+      "pass": true,
+      "failures": []
+    },
+    {
+      "id": "Q12",
+      "q": "Without an API key, show the votes on S2180 (2013).",
+      "pass": true,
+      "failures": []
+    }
+  ]
+}

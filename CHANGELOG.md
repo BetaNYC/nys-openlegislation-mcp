@@ -82,6 +82,18 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
   API's `total`), and the `offset` for the next page; the local copy has no total, so a
   full page says more may be available. `test/answers.test.js` checks it on a
   25,520-bill fixture.
+- The server instructions now say once what several tools used to repeat (#42): session
+  years, ElasticSearch query syntax, `limit`/`offset` paging, and the source line at the
+  end of each answer. The tool descriptions are shorter; the shared about_data paragraph
+  is unchanged. `test/tool-list.test.js` fails if a sentence repeats across tools.
+
+### Added (tests)
+
+- `eval/` (#40): 12 realistic questions with known answers, written before scoring, run
+  offline against fixtures from the API documentation's example responses
+  (`npm run eval`, results in `eval/runs/`; also run by `npm test`).
+- `test/stdout.test.js` (#41): starts the server and fails on any stdout line that is not
+  a JSON-RPC message, and on any direct stdout write in `src/`.
 - The shared tools are dispatched with `callAsync`, because the corpus freshness
   hook reads the local copy asynchronously.
 

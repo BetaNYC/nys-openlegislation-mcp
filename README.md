@@ -301,6 +301,8 @@ npm run test:live   # real calls to the NYS Open Legislation API; needs a key
 
 `npm run test:live` runs the smoke tests in `test/live/`, which make one read-only GET per searchable type. Without a key it fails with setup instructions rather than skipping, because reaching it means you asked for it.
 
+`npm run eval` runs the evaluation set in `eval/questions.json`: 12 questions a person would ask (who sponsored a bill, how a member voted, the second page of a listing, which link to cite for a law article), each with a known answer, written before scoring. It runs offline: each answer comes from a fixture copied from the example responses in the API's own documentation, so it checks that each tool sends the documented request and returns the right fact, paging line and source line; it does not test a model's choice of tool. Results go to `eval/runs/`. `npm test` runs the same set (`test/eval.test.js`), and `test/stdout.test.js` checks that the server writes only protocol messages to stdout.
+
 This split exists because the previous arrangement gated the live test on the API key being present, which meant a machine configured to *run* this server also made live requests on a plain `npm test`. Having a key is not the same as intending to use it.
 
 ---

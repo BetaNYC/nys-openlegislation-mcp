@@ -73,6 +73,13 @@ export const betanyc = betanycTools({
 export const SERVER_INSTRUCTIONS =
   "New York State legislation, laws, members, committees, calendars, agendas and transcripts, " +
   "from the New York State Senate's Open Legislation API, by BetaNYC. " +
+  // Said once here rather than in each tool's description (#42).
+  "A session year is the odd year a two-year session starts: the 2025 session covers 2025 and 2026. " +
+  "Search terms use ElasticSearch syntax: AND, OR, NOT, \"phrase quotes\", wildcards (environ*) and " +
+  "fields (title:\"climate\" AND sponsor:Krueger). " +
+  "Lists take limit (each tool gives its default and maximum) and offset, the number of results to skip; " +
+  "each list answer says which results it shows and the offset for the next page. " +
+  "Every data answer ends with its source, a link and how current it is. " +
   BETANYC_INSTRUCTIONS;
 
 /** The Open Legislation tools. Each can call the live API (when the local copy has no answer,
@@ -83,10 +90,7 @@ const DOMAIN_TOOLS: Tool[] = [
     name: "search_bills",
     description:
       "Search NYS legislation by keyword using ElasticSearch syntax. " +
-      "Searches bill titles, summaries, and full text. Supports boolean operators " +
-      "(AND, OR, NOT), phrase quotes, wildcards, and field targeting " +
-      "(e.g. title:\"climate\" AND sponsor:Krueger). " +
-      "Optionally filter by session year (odd-numbered years: 2023, 2025, etc.).",
+      "Searches bill titles, summaries, and full text. Optionally filter by session year.",
     inputSchema: {
       additionalProperties: false,
       type: "object",
@@ -94,10 +98,10 @@ const DOMAIN_TOOLS: Tool[] = [
         term: { type: "string", description: "Search term or ElasticSearch query string" },
         session_year: {
           type: "number",
-          description: "Legislative session year (odd-numbered, e.g. 2025). Omit to search all sessions (all sessions in the local corpus, when it answers).",
+          description: "Session year. Omit to search all sessions (all sessions in the local corpus, when it answers).",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["term"],
     },
@@ -118,7 +122,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year. Defaults to the current session.",
         },
       },
       required: ["print_no"],
@@ -134,10 +138,10 @@ const DOMAIN_TOOLS: Tool[] = [
       properties: {
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year. Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 25, max 500)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
     },
   },
@@ -157,7 +161,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year. Defaults to the current session.",
         },
       },
       required: ["print_no"],
@@ -181,7 +185,7 @@ const DOMAIN_TOOLS: Tool[] = [
           description: "End datetime, ISO-8601 format: 'YYYY-MM-DDTHH:MM:SS'",
         },
         limit: { type: "number", description: "Max results (default 50, max 500)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["from", "to"],
     },
@@ -258,10 +262,10 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year. Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 100, max 200)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["chamber"],
     },
@@ -287,7 +291,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year. Defaults to the current session.",
         },
       },
       required: ["member_id", "chamber"],
@@ -314,10 +318,10 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year. Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["term"],
     },
@@ -339,10 +343,10 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year. Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 100, max 200)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["chamber"],
     },
@@ -366,7 +370,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year. Defaults to the current session.",
         },
       },
       required: ["committee_name", "chamber"],
@@ -392,10 +396,10 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year. Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["committee_name", "chamber"],
     },
@@ -416,7 +420,7 @@ const DOMAIN_TOOLS: Tool[] = [
           description: "Calendar year (e.g. 2025). Defaults to current year.",
         },
         limit: { type: "number", description: "Max results (default 50, max 200)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
     },
   },
@@ -457,7 +461,7 @@ const DOMAIN_TOOLS: Tool[] = [
           description: "Calendar year (e.g. 2025). Defaults to current year.",
         },
         limit: { type: "number", description: "Max results (default 50, max 200)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
     },
   },
@@ -497,7 +501,7 @@ const DOMAIN_TOOLS: Tool[] = [
           description: "Year of the transcripts (e.g. 2025). Defaults to current year.",
         },
         limit: { type: "number", description: "Max results (default 50, max 200)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
     },
   },
@@ -531,7 +535,7 @@ const DOMAIN_TOOLS: Tool[] = [
           description: "Year of the transcripts (e.g. 2025). Defaults to current year.",
         },
         limit: { type: "number", description: "Max results (default 50, max 200)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
     },
   },
@@ -586,7 +590,7 @@ const DOMAIN_TOOLS: Tool[] = [
           description: "Restrict results to one content type (optional)",
         },
         limit: { type: "number", description: "Max results (default 50, max 500)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["from", "to"],
     },
@@ -600,7 +604,6 @@ const DOMAIN_TOOLS: Tool[] = [
       "The upstream API has no unified search endpoint — each content type is searched separately, " +
       "so this tool searches a single type per call (defaults to bills). " +
       "Supported types: bills, laws, agendas, calendars, transcripts, hearings. " +
-      "Supports boolean operators (AND, OR, NOT), phrase quotes, wildcards, and field targeting. " +
       "To search resolutions, use type 'bills' (they share the bills index). " +
       "Results of type laws carry nysenate_url (SECTION and ARTICLE only, otherwise null).",
     inputSchema: {
@@ -623,7 +626,7 @@ const DOMAIN_TOOLS: Tool[] = [
           description: "Filter bills to a specific session year (optional)",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["term"],
     },

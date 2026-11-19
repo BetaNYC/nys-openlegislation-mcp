@@ -5,31 +5,66 @@ All notable changes to `@betanyc/nys-openlegislation-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.7.0] - unreleased
+## [3.0.0] - 2026-11-19
 
 Adds `about_data`, the third tool BetaNYC is adding to each of its MCP servers, and moves to
-shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betanyc-ai-workspace#1655 and #1672 (epic #1652).
+shared module 1.5.2. Every answer now says where it came from and how current it is. Fixes the
+local copy's sync times and a repeated result in live paging. This release was prepared as
+2.7.0; it is 3.0.0 because the changes below under "Breaking changes" can break a caller that
+worked with 2.6.0 (Semantic Versioning). Tracking: BetaNYC/betanyc-ai-workspace#1655 and
+#1672 (epic #1652); epic #29.
 
-### Breaking
+### Breaking changes
 
-- **The text at the end of every data answer changed** (shared module 1.5.1 and 1.5.2).
-  It was `Source: Open Legislation API (New York State Senate). As of <ISO time in UTC>
-  (fetched from the source for this answer). Link: https://legislation.nysenate.gov/`.
-  It is now `BetaNYC modified this data: <what BetaNYC did>. This copy should not be
-  considered the official record. Fetched from the source for this answer at
-  2026-11-18 13:05 EST (New York time). Official record: Open Legislation API (New York
-  State Senate), https://legislation.nysenate.gov/`: New York time, to the minute, with
-  no ISO time and no `Source:` or `Link:` label. An answer from the local copy has the
-  same frame, with `As of <date> (the date of the copy this server answers from).` or
-  `As of: unknown …`. Anything that reads the time, or looks for `Source:` or `Link:`,
-  out of the text will break.
-- **Local `search_bills` results no longer have a `rank` field.** The Senate's own search
-  results carry `rank`; the local copy's SQLite full-text score was put under the same
-  name. It is now `betanyc.search_score` (lower is a closer match), and the answer says
-  the order is BetaNYC's local search, not the Senate's.
-- **Local `search_members` no longer replaces the Senate's `fullName` or `chamber`.** It
-  fills them only when the Senate's member record lacks them, and lists what it filled in
-  `betanyc.filled`.
+Each item compares with 2.6.0 and says what a caller must do differently.
+
+- **The end of every data answer changed.** 2.6.0 ended each answer with a `---` line and
+  "Data sourced from the NYS Open Legislation API, maintained by the New York State Senate. …
+  Verify critical information at legislation.nysenate.gov." After the same `---` line there
+  are now: on a list, a paging line; on a list from the local copy, an order line; the
+  source line from the shared `provenance()` (`BetaNYC modified this data: <what BetaNYC
+  did>. This copy should not be considered the official record.`, then the fetch time in
+  New York time to the minute for a live answer, or `As of <date> …` for the local copy,
+  then `Official record: Open Legislation API (New York State Senate),
+  https://legislation.nysenate.gov/`); sometimes a note about the local copy's date; and the
+  caveat to verify at legislation.nysenate.gov. *What to do:* take the JSON from before the
+  first `\n\n---\n`, as before, and do not look for the old "Data sourced from" sentence.
+- **Every list tool's `limit` has a maximum, a higher one is lowered, and bad numbers are
+  refused.** In 2.6.0 only `search_bills` and `search` (100) and `list_bills` and
+  `get_bill_updates` (500) had a maximum, and a higher `limit` was an error. Now a higher
+  `limit` is lowered to the maximum, and the paging line says "limit lowered to N". The
+  tools that had none now have one: `search_members` and `get_committee_meetings` 100;
+  `list_members`, `list_committees`, `list_calendars`, `list_agendas`,
+  `list_floor_transcripts` and `list_hearing_transcripts` 200; `get_updates` 500. A `limit`
+  under 1, a negative `offset`, or a number that is not whole is now an error. *What to do:*
+  ask for the next page with `offset` instead of a bigger `limit`, and send whole numbers.
+- **A live `offset` now really counts from 0.** In 2.6.0, `offset: 0` and `offset: 1`
+  returned the same first page, and each page started with the last result of the page
+  before. *What to do:* if you sent `offset + 1` to get around that, send `0`, `25`, `50` …
+  now; otherwise you skip a result.
+- **Local `search_bills` results have no `rank`.** The local copy's full-text score was put
+  in `rank`, the Senate's own field name. It is now `betanyc.search_score` (lower is a closer
+  match). *What to do:* read `betanyc.search_score`; `rank` is only in the Senate's live
+  results.
+- **Local `search_members` keeps the Senate's `fullName` and `chamber`.** 2.6.0 replaced
+  them with values from the local copy. Now they are filled only when the Senate's member
+  record lacks them, and `betanyc.filled` lists what was filled. *What to do:* expect the
+  Senate's spelling of a name; read `betanyc.filled` to see which values BetaNYC added.
+- **The local copy's `source` field reads differently.** In 2.6.0 it was always
+  `local corpus (synced <time with no zone>)`. The time now has its zone, and for laws,
+  members, committees and transcripts it gives that type's download date, or says that date
+  is not recorded (for example `local corpus (laws downloaded <time>; the nightly sync does
+  not update laws)`). *What to do:* do not read a date out of `source` with a fixed pattern;
+  the source line at the end of the answer says the same in words.
+- **Error text changed.** Errors are still `isError: true`, but the text is now a plain
+  sentence that says what to try, not `NYS Open Legislation API error <status>: …` or
+  `API returned failure: …`, and the API key is never in it. *What to do:* check `isError`,
+  not the words.
+- **For people who keep a local copy:** `sync_state.last_synced_at` is now stored with its
+  New York offset (for example `2026-11-13T16:58:00-05:00`), not as UTC with no zone, and
+  `scripts/fetch-data.js` exits with code 1 when any item failed to download, without saving
+  that type's date. *What to do:* a script that reads `last_synced_at` must read the offset;
+  a scheduled job should treat exit code 1 as "run the command it printed again".
 
 ### Added
 
@@ -103,7 +138,7 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
   only as the `key` query parameter (API Conventions, "Base URL and API key"), so it
   stays there. `test/upstream.test.js` covers all three.
 - Every data answer names its source and how current it is (#33, #34): after the JSON,
-  a line from the shared `provenance()` (see Breaking for its words). It says what
+  a line from the shared `provenance()` (see Breaking changes for its words). It says what
   BetaNYC did to the data, in the words `about_data` uses: for a live answer, that it is
   passed on as the API returns it with additions that change no value (paging totals,
   links to nysenate.gov, an empty vote list for a bill with none); for the local copy,

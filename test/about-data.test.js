@@ -93,7 +93,7 @@ test("no local copy: the corpus source says it is not available here", async () 
   assert.equal(s.as_of, `not available on this server: ${CORPUS_UNAVAILABLE_REASON}`);
 });
 
-test("a corpus synced by 2.7.0 or later: the stored New York time, with its offset", () => {
+test("a corpus synced by 3.0.0 or later: the stored New York time, with its offset", () => {
   // corpusSyncedAt reads through syncedAtWithZone; test/sync-time.test.js covers it in full.
   assert.equal(syncedAtWithZone("2026-11-13T16:58:00-05:00"), "2026-11-13T16:58:00-05:00");
 });

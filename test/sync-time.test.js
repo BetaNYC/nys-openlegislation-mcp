@@ -1,7 +1,7 @@
-// The local copy's sync time (2.7.0). The Senate's API reads every date and time as New York
+// The local copy's sync time (3.0.0). The Senate's API reads every date and time as New York
 // local time written with no offset, and ignores an offset if one is sent ("API Conventions",
 // "Dates and times"; "Keeping Up with Changes": end each range at New York now minus 2 minutes,
-// and note that time before an initial load). Until 2.7.0, scripts/sync.js and
+// and note that time before an initial load). Until 3.0.0, scripts/sync.js and
 // scripts/fetch-data.js sent and stored the UTC time with its Z cut off, so each sync's range
 // ended four or five hours in the future and the next sync skipped the changes made in that
 // window. These tests pin the conversion, both seasons of daylight saving time, how a value
@@ -54,7 +54,7 @@ test("a range ends at New York now minus 2 minutes, sent with no offset", () => 
 test("a stored time with a zone is that instant; an unmarked one is from an older version, so UTC", () => {
   assert.equal(parseStoredSyncTime("2026-11-13T16:58:00-05:00").toISOString(), "2026-11-13T21:58:00.000Z");
   assert.equal(parseStoredSyncTime("2026-11-13T21:58:00Z").toISOString(), "2026-11-13T21:58:00.000Z");
-  // Written by toISOString().split(".")[0] before 2.7.0: UTC with the Z cut off.
+  // Written by toISOString().split(".")[0] before 3.0.0: UTC with the Z cut off.
   assert.equal(parseStoredSyncTime("2026-10-22T04:00:00").toISOString(), "2026-10-22T04:00:00.000Z");
   assert.equal(parseStoredSyncTime("2026-10-22 04:00:00").toISOString(), "2026-10-22T04:00:00.000Z");
   assert.equal(parseStoredSyncTime("yesterday"), null);
@@ -65,7 +65,7 @@ test("the next sync starts where the last one really ended, in New York time", (
   // An old corpus: last synced at 04:00 UTC, which is midnight in New York (EDT). The old code
   // sent "2026-10-22T04:00:00", which the API read as 4 a.m. New York: four hours late.
   assert.equal(resolveFrom(undefined, "2026-10-22T04:00:00"), "2026-10-22T00:00:00");
-  // A corpus synced by 2.7.0 or later.
+  // A corpus synced by 3.0.0 or later.
   assert.equal(resolveFrom(undefined, "2026-11-13T16:58:00-05:00"), "2026-11-13T16:58:00");
   // --from is the API's own convention, New York local time; with a zone it is converted.
   assert.equal(resolveFrom("2026-11-01T09:00:00", "2026-11-13T16:58:00-05:00"), "2026-11-01T09:00:00");

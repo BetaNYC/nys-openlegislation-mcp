@@ -1,6 +1,6 @@
 // scripts/lib/ny-time.js
 //
-// Times for the Open Legislation update ranges and the corpus watermark (2.7.0).
+// Times for the Open Legislation update ranges and the corpus watermark (3.0.0).
 //
 // The API reads every date and time as New York local time written with no offset, and an
 // offset it is sent is ignored, not converted: "2026-10-20T18:30:00Z means 6:30 p.m. in New
@@ -9,7 +9,7 @@
 // minus 2 minutes, to send the saved end as the next range's start, and to note that time
 // before an initial load, not after it.
 //
-// Before 2.7.0, sync.js and fetch-data.js sent and stored new Date().toISOString().split(".")[0]:
+// Before 3.0.0, sync.js and fetch-data.js sent and stored new Date().toISOString().split(".")[0]:
 // the UTC time with its Z cut off. The API read it as New York time, four or five hours late,
 // so each range ended in the future and the next one skipped the changes made in between.
 //

@@ -135,7 +135,7 @@
           "A member who has never been the prime sponsor of a bill in the copy has no full name in it.",
           "Lists answered from the copy have no total count; only the live API gives one.",
           "Lists answered from the copy are in BetaNYC's order, not the Senate's, so page 1 from the copy can differ from the live page 1.",
-          "A copy last synced by a version before 2.7.0 can be missing changes made in the hours after each of its syncs, and during its first download. Running the sync once from the date the copy was built picks them up (see What's changed)."
+          "A copy last synced by a version before 3.0.0 can be missing changes made in the hours after each of its syncs, and during its first download. Running the sync once from the date the copy was built picks them up (see What's changed)."
         ]
       },
       "terms": {

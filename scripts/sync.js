@@ -75,7 +75,7 @@ const INCLUDE_TRANSCRIPT_TEXT = syncState.include_transcript_text === "1";
 // The API reads every time as New York local time with no offset, and ignores an offset it is
 // sent (conventions.html, "Dates and times"). Each range ends at New York now minus 2 minutes,
 // and that end, stored with its offset, is the next range's start (keeping_up.html). A stored
-// value with no zone was written by a version before 2.7.0 as UTC with its Z cut off, and is
+// value with no zone was written by a version before 3.0.0 as UTC with its Z cut off, and is
 // read as UTC: see scripts/lib/ny-time.js.
 let fromDateTime;
 try {

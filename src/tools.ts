@@ -36,7 +36,7 @@ export const CORPUS_UNAVAILABLE_REASON =
 /**
  * When the local corpus was last synced, for about_data's `corpus` source. Read from the
  * corpus's own sync_state, with no network call; null when there is no readable value. The
- * value is shown with its zone (syncedAtWithZone): a New York offset since 2.7.0, or, for a
+ * value is shown with its zone (syncedAtWithZone): a New York offset since 3.0.0, or, for a
  * corpus last synced by an older version, the UTC Z that version cut off.
  */
 export async function corpusSyncedAt(): Promise<string | null> {

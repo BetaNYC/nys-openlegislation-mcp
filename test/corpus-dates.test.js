@@ -161,7 +161,7 @@ test("corpusDate: per type, from sync_state alone, with no guessing", () => {
   }
   assert.equal(corpusDate("laws", null).asOf, null, "an unreadable sync_state gives no date");
   assert.equal(corpusDate("bills", null).words, "synced unknown date");
-  // A value written before 2.7.0 (unmarked UTC) is shown with its Z, like the sync time.
+  // A value written before 3.0.0 (unmarked UTC) is shown with its Z, like the sync time.
   assert.equal(corpusDate("members", { fetched_at_members: "2026-06-01T14:00:00" }).asOf, "2026-06-01T14:00:00Z");
 });
 

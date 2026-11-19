@@ -224,7 +224,7 @@ test(
     assert.equal(calls.length, 0, "a corpus hit must not reach the API");
 
     const payload = JSON.parse(text.split("\n\n---\n")[0]);
-    // The sync time with its zone (2.7.0): this corpus stores the pre-2.7.0 unmarked UTC form.
+    // The sync time with its zone (3.0.0): this corpus stores the pre-3.0.0 unmarked UTC form.
     assert.equal(payload.source, `local corpus (synced ${SYNCED_AT}Z)`);
     assert.match(
       payload.freshness,

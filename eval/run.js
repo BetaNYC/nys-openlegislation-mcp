@@ -7,6 +7,19 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/** The source line every eval answer must end with. Every eval answer is live, so only the live
+ * wording passes: what BetaNYC did (as about_data says it for "live"), the fetch time in New York
+ * time to the minute, and the official record at https://legislation.nysenate.gov/. Group 1 is
+ * the minute. */
+export const LIVE_SOURCE_LINE = new RegExp(
+  "^BetaNYC modified this data: passed on as the Senate's Open Legislation API returns it, with additions that change no value: " +
+    "the API's paging totals, links to nysenate.gov, and an empty vote list for a bill with no votes\\. " +
+    "This copy should not be considered the official record\\. " +
+    "Fetched from the source for this answer at (\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}) E[SD]T \\(New York time\\)\\. " +
+    "Official record: Open Legislation API \\(New York State Senate\\), https://legislation\\.nysenate\\.gov/$",
+  "m",
+);
 const KEY = "eval-key-not-real";
 
 /** The value at a dotted path ("a.0.b"; an empty segment is the key ""). */
@@ -68,8 +81,7 @@ export async function runEval() {
         if (c.text && !new RegExp(c.text, "m").test(text)) fail(`text does not match /${c.text}/`);
         // Invariants.
         if (text.includes(key ?? "\u0000")) fail("the API key appears in the answer");
-        // A live answer gives its fetch time; a local one, its copy's date (shared module 1.5.1).
-        if (!r.isError && !/^Source: .*New York State Senate.*\. (?:As of .+|Fetched from the source for this answer at .+) Link: https:\/\//m.test(text)) fail("data answer has no source line");
+        if (!r.isError && !LIVE_SOURCE_LINE.test(text)) fail("data answer has no live source line");
       }
       results.push({ id: q.id, q: q.q, pass: failures.length === 0, failures });
     }

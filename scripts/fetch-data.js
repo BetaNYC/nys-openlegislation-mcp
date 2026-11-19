@@ -353,6 +353,11 @@ async function fetchBills() {
   }
 }
 
+// Items the current type's download could not fetch (fetchType). fetchLaws and fetchTranscripts
+// carry on past a failed item so one bad law or year does not stop the rest; they count it here,
+// and a type with any failure gets no download date.
+let failedItems = 0;
+
 async function fetchLaws() {
   console.log("\n📜 Fetching laws…");
   const { result: lawList } = await apiFetch("/laws", { limit: 500 });
@@ -404,13 +409,17 @@ async function fetchLaws() {
               raw_json: JSON.stringify(fullSec),
             });
             await sleep(DELAY_MS);
-          } catch { /* skip individual section errors */ }
+          } catch (e) {
+            failedItems++;
+            console.warn(`\n  ⚠ ${law.lawId} ${sec.locationId}: ${e.message}`);
+          }
         }
       }
 
       process.stdout.write(`\r  ${law.lawId}: ${sections.length} sections ✓`);
     } catch (e) {
-      process.stdout.write(`\r  ${law.lawId}: skipped (${e.message})`);
+      failedItems++;
+      console.warn(`\n  ⚠ ${law.lawId}: skipped (${e.message})`);
     }
     await sleep(DELAY_MS);
   }
@@ -525,6 +534,7 @@ async function fetchTranscripts() {
             const { result } = await apiFetch(`/transcripts/${encodeURIComponent(t.dateTime)}`);
             full.push(result);
           } catch (e) {
+            failedItems++;
             console.warn(`\n  ⚠ floor/${year} ${t.dateTime}: ${e.message}`);
             full.push(t);
           }
@@ -547,6 +557,7 @@ async function fetchTranscripts() {
       });
       insertMany(items);
     } catch (e) {
+      failedItems++;
       console.warn(`\n  ⚠ floor transcripts ${year}: ${e.message}`);
     }
 
@@ -560,6 +571,7 @@ async function fetchTranscripts() {
             const { result } = await apiFetch(`/hearings/${encodeURIComponent(t.filename)}`);
             full.push(result);
           } catch (e) {
+            failedItems++;
             console.warn(`\n  ⚠ hearing/${year} ${t.filename}: ${e.message}`);
             full.push(t);
           }
@@ -582,6 +594,7 @@ async function fetchTranscripts() {
       });
       insertMany(items);
     } catch (e) {
+      failedItems++;
       console.warn(`\n  ⚠ hearing transcripts ${year}: ${e.message}`);
     }
 
@@ -605,14 +618,24 @@ const startTime = Date.now();
 const LOAD_START = rangeEnd(new Date(startTime));
 
 // When each type was downloaded: the time noted before its download, saved with its New York
-// offset as sync_state.fetched_at_<type> once the download is done. The nightly sync refreshes
-// only bills, agendas and calendars, so answers about laws, members, committees and transcripts
-// give this date, not the sync time (src/corpusDates.ts).
+// offset as sync_state.fetched_at_<type> only when the whole download worked. The nightly sync
+// refreshes only bills, agendas and calendars, so answers about laws, members, committees and
+// transcripts give this date, not the sync time (src/corpusDates.ts). A type with a failed item,
+// or whose download stopped with an error, keeps its earlier date (or none), and the run ends
+// with a non-zero exit code saying how many items failed.
+const failedTypes = [];
 async function fetchType(type, fetchAll) {
   if (!TYPES.has(type)) return;
   const started = nyStamp(new Date());
-  await fetchAll();
-  setSyncState.run(`fetched_at_${type}`, started);
+  failedItems = 0;
+  try {
+    await fetchAll();
+  } catch (e) {
+    failedItems++;
+    console.warn(`\n  ⚠ ${type}: the download stopped: ${e.message}`);
+  }
+  if (failedItems === 0) setSyncState.run(`fetched_at_${type}`, started);
+  else failedTypes.push({ type, count: failedItems });
 }
 
 await fetchType("bills", fetchBills);
@@ -642,5 +665,16 @@ setSyncState.run("include_transcript_text", INCLUDE_TRANSCRIPT_TEXT ? "1" : "0")
 db.close();
 
 const elapsed = Math.round((Date.now() - startTime) / 1000);
-console.log(`\n✅ Done in ${Math.floor(elapsed / 60)}m ${elapsed % 60}s`);
-console.log(`   DB: ${DB_PATH}`);
+if (failedTypes.length) {
+  const total = failedTypes.reduce((n, f) => n + f.count, 0);
+  console.error(
+    `\n✖ ${total} item(s) could not be downloaded (${failedTypes.map((f) => `${f.type}: ${f.count}`).join(", ")}), ` +
+      `after ${Math.floor(elapsed / 60)}m ${elapsed % 60}s. The download date of ${failedTypes.map((f) => f.type).join(", ")} ` +
+      "was not saved, so answers keep the earlier date, or say it is not recorded. Run again for those types: " +
+      `node scripts/fetch-data.js --types=${failedTypes.map((f) => f.type).join(",")}`
+  );
+  process.exitCode = 1;
+} else {
+  console.log(`\n✅ Done in ${Math.floor(elapsed / 60)}m ${elapsed % 60}s`);
+  console.log(`   DB: ${DB_PATH}`);
+}

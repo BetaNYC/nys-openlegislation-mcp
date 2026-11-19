@@ -14,6 +14,7 @@
  *  - A User-Agent naming this package and its version. No background polling: a request is
  *    only ever sent for a tool call.
  */
+import { errorSummary } from "./betanyc-tools.js";
 import { createRequire } from "node:module";
 
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
@@ -81,8 +82,11 @@ async function once(url: string): Promise<Raw> {
         throw new UpstreamError("timeout", `no answer within ${timing.timeoutMs / 1000} seconds`);
       }
       // Node's fetch says "fetch failed" and puts the reason in `cause`; neither carries the URL.
-      const cause = (err as { cause?: { code?: string; message?: string } })?.cause;
-      throw new UpstreamError("network", cause?.code ?? cause?.message ?? (err as Error)?.message ?? "network error");
+      // A message can run to several lines with stack frames: only its first plain line is kept
+      // (shared errorSummary).
+      const cause = (err as { cause?: { code?: unknown } })?.cause;
+      const code = typeof cause?.code === "string" && cause.code ? cause.code : null;
+      throw new UpstreamError("network", code ?? errorSummary(cause ?? err, 200));
     }
     // The body is read inside the slot: the API counts a request as in progress until it ends.
     const retryAfter = retryAfterSeconds(res.headers?.get?.("retry-after"));

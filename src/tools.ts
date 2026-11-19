@@ -633,7 +633,7 @@ const DOMAIN_TOOLS: Tool[] = [
   },
 ];
 
-/** Every tool, annotated (shared module 1.5.1): all only read (readOnlyHint), the Open Legislation
+/** Every tool, annotated (shared module 1.5.2): all only read (readOnlyHint), the Open Legislation
  * tools may call the live API (openWorldHint true), and the three shared tools, which answer from
  * this repo's own files, carry their own annotations. annotateTools throws at startup on a gap. */
 export const TOOLS: Tool[] = annotateTools(

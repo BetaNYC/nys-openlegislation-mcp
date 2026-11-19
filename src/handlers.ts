@@ -15,9 +15,9 @@ import {
   type ApiKey,
 } from "./api.js";
 import { UpstreamError, timing } from "./http.js";
-import { provenance, toolError } from "./betanyc-tools.js";
+import { provenance, toolError, type ChangedByBetanyc } from "./betanyc-tools.js";
 import { parseArgs, ParseArgsError, betanyc } from "./tools.js";
-import { corpusDateFor, type CorpusDate, type CorpusType } from "./corpusDates.js";
+import { corpusDateFor, withTypeDates, type CorpusDate, type CorpusType } from "./corpusDates.js";
 import {
   getBill,
   searchBills,
@@ -117,13 +117,39 @@ export function pagingLine(payload: unknown, page: Page, local = false): string 
     : `${shown}: all ${local ? "the local copy has" : "there are"}.`;
 }
 
+/** What BetaNYC did to a live answer: the same as about_data's "live" source (DATA-SOURCES.json,
+ * changes: reshaped), so the answer and about_data agree. */
+export const LIVE_CHANGES: ChangedByBetanyc = {
+  kind: "modified-by-betanyc",
+  detail: "passed on as the Senate's Open Legislation API returns it, with additions that change no value: " +
+    "the API's paging totals, links to nysenate.gov, and an empty vote list for a bill with no votes",
+};
+
+/** What BetaNYC did to an answer from the local copy (about_data's "corpus" source). */
+export const LOCAL_CHANGES: ChangedByBetanyc = {
+  kind: "modified-by-betanyc",
+  detail: "a copy of the Senate's Open Legislation data that BetaNYC saved and indexed on this machine; " +
+    "searching it and the order of its lists are BetaNYC's own, not the Senate's",
+};
+
+/** The order line for a list answered from the local copy: BetaNYC chose the order, so its
+ * page 1 can differ from the Senate's. */
+export function localOrderLine(how: string): string {
+  return `Order: the local copy's own (${how}), which can differ from the Senate's, so page 1 here may not be the Senate's page 1.`;
+}
+
+/** The order line for search_bills from the local copy. */
+export const LOCAL_SEARCH_ORDER =
+  "Order: BetaNYC's own local search (its match score is in betanyc.search_score), not the Senate's search; the Senate's results and their order can differ.";
+
 /**
- * One data answer (#33, #34): the payload as JSON, then which results it shows (lists), the
- * source with its link and how current it is (shared provenance(): the fetch time for a live
- * call; for the local corpus, the date of that type of data, corpusDates.ts: the sync time only
- * for the types the sync refreshes), and the caveat.
+ * One data answer (#33, #34): the payload as JSON, then which results it shows (lists) and, for a
+ * local list, whose order it is, then the source with its link and how current it is (shared
+ * provenance(): the fetch time for a live call; for the local corpus, the date of that type of
+ * data, corpusDates.ts: the sync time only for the types the sync refreshes), saying what
+ * BetaNYC did to the data (changedByBetanyc, as about_data says it), and the caveat.
  */
-export async function answer(payload: unknown, from: "live" | CorpusDate, page?: Page): Promise<CallToolResult> {
+export async function answer(payload: unknown, from: "live" | CorpusDate, page?: Page, order?: string): Promise<CallToolResult> {
   const local = from !== "live";
   const p = provenance({
     sourceName: "Open Legislation API",
@@ -131,8 +157,15 @@ export async function answer(payload: unknown, from: "live" | CorpusDate, page?:
     sourceUrl: VERIFY_AT,
     kind: local ? "snapshot" : "live",
     ...(local ? { asOf: from.asOf } : {}),
+    changedByBetanyc: local ? LOCAL_CHANGES : LIVE_CHANGES,
   });
-  const lines = [page ? pagingLine(payload, page, local) : null, p.text, local ? from.note : null, CAVEAT].filter(Boolean);
+  const lines = [
+    page ? pagingLine(payload, page, local) : null,
+    local && page ? order ?? null : null,
+    p.text,
+    local ? from.note : null,
+    CAVEAT,
+  ].filter(Boolean);
   return { content: [{ type: "text", text: `${JSON.stringify(payload, null, 2)}\n\n---\n${lines.join("\n")}` }] };
 }
 
@@ -145,7 +178,11 @@ export async function callTool(
   // WHATS-CHANGED.md and DATA-SOURCES.json and answer about the server, not from Open
   // Legislation data, so they need no API key and carry no data disclaimer. callAsync, because
   // about_data's corpus freshness hook reads the corpus asynchronously.
-  if (betanyc.handles(name)) return betanyc.callAsync(name, args);
+  // about_data's "How current" for the local copy is rewritten per data type (corpusDates.ts).
+  if (betanyc.handles(name)) {
+    const r = await betanyc.callAsync(name, args);
+    return name === "about_data" ? ((await withTypeDates(r as never)) as CallToolResult) : (r as CallToolResult);
+  }
 
   /**
    * Wrap a local corpus result into a tool response, or return null to fall
@@ -160,7 +197,7 @@ export async function callTool(
    * live data to fall through to, so they get an explicit not-found-in-corpus
    * response instead of a bare empty payload (issue #13).
    */
-  async function localResponse(local: unknown, type: CorpusType, page?: Page): Promise<CallToolResult | null> {
+  async function localResponse(local: unknown, type: CorpusType, page?: Page, order?: string): Promise<CallToolResult | null> {
     if (local == null || isEmptyLocalResult(local)) {
       if (apiKey) return null;
       const date = await corpusDateFor(type);
@@ -168,7 +205,7 @@ export async function callTool(
     }
     const date = await corpusDateFor(type);
     const annotated = await annotateLocalResult(local as object, !apiKey, date);
-    return answer(annotated, date, page);
+    return answer(annotated, date, page, order);
   }
 
   try {
@@ -183,7 +220,7 @@ export async function callTool(
         }, args);
         const page = pageOf(limit, offset, 25, 100);
         const local = await localSearchBills(term, session_year, page.limit, page.offset);
-        const localResp = await localResponse(local, "bills", page);
+        const localResp = await localResponse(local, "bills", page, LOCAL_SEARCH_ORDER);
         if (localResp) return localResp;
         const results = await searchBills(apiKey, term, session_year, page.limit, page.offset);
         return answer(results, "live", page);
@@ -208,7 +245,7 @@ export async function callTool(
         const page = pageOf(limit, offset, 25, 500);
         const year = session_year ?? currentSessionYear();
         const local = await localListBills(year, page.limit, page.offset);
-        const localResp = await localResponse(local, "bills", page);
+        const localResp = await localResponse(local, "bills", page, localOrderLine("newest published first"));
         if (localResp) return localResp;
         const results = await listBills(apiKey, year, page.limit, page.offset);
         return answer(results, "live", page);
@@ -277,7 +314,7 @@ export async function callTool(
         const page = pageOf(limit, offset, 100, 200);
         const year = session_year ?? currentSessionYear();
         const local = await localListMembers(year, chamber, page.limit, page.offset);
-        const localResp = await localResponse(local, "members", page);
+        const localResp = await localResponse(local, "members", page, localOrderLine("by short name"));
         if (localResp) return localResp;
         const results = await listMembers(apiKey, year, chamber, page.limit, page.offset);
         return answer(results, "live", page);
@@ -315,7 +352,7 @@ export async function callTool(
         // the near-duplicate list the disambiguation rule cannot work from.
         const year = session_year ?? currentSessionYear();
         const local = await localSearchMembers(term, year, chamber, page.limit, page.offset);
-        const localResp = await localResponse(local, "members", page);
+        const localResp = await localResponse(local, "members", page, localOrderLine("newest session first, then by short name"));
         if (localResp) return localResp;
         const results = await searchMembers(apiKey, term, year, chamber, page.limit, page.offset);
         return answer(results, "live", page);
@@ -332,7 +369,7 @@ export async function callTool(
         const page = pageOf(limit, offset, 100, 200);
         const year = session_year ?? currentSessionYear();
         const local = await localListCommittees(year, chamber, page.limit, page.offset);
-        const localResp = await localResponse(local, "committees", page);
+        const localResp = await localResponse(local, "committees", page, localOrderLine("by name"));
         if (localResp) return localResp;
         const results = await listCommittees(apiKey, year, chamber, page.limit, page.offset);
         return answer(results, "live", page);
@@ -383,7 +420,7 @@ export async function callTool(
         const page = pageOf(limit, offset, 50, 200);
         const calYear = year ?? new Date().getFullYear();
         const local = await localListCalendars(calYear, page.limit, page.offset);
-        const localResp = await localResponse(local, "calendars", page);
+        const localResp = await localResponse(local, "calendars", page, localOrderLine("highest calendar number first"));
         if (localResp) return localResp;
         const results = await listCalendars(apiKey, calYear, page.limit, page.offset);
         return answer(results, "live", page);
@@ -408,7 +445,7 @@ export async function callTool(
         const page = pageOf(limit, offset, 50, 200);
         const agYear = year ?? new Date().getFullYear();
         const local = await localListAgendas(agYear, page.limit, page.offset);
-        const localResp = await localResponse(local, "agendas", page);
+        const localResp = await localResponse(local, "agendas", page, localOrderLine("highest agenda number first"));
         if (localResp) return localResp;
         const results = await listAgendas(apiKey, agYear, page.limit, page.offset);
         return answer(results, "live", page);
@@ -433,7 +470,7 @@ export async function callTool(
         const page = pageOf(limit, offset, 50, 200);
         const ftYear = year ?? new Date().getFullYear();
         const local = await localListFloorTranscripts(ftYear, page.limit, page.offset);
-        const localResp = await localResponse(local, "transcripts", page);
+        const localResp = await localResponse(local, "transcripts", page, localOrderLine("newest first"));
         if (localResp) return localResp;
         const results = await listFloorTranscripts(apiKey, ftYear, page.limit, page.offset);
         return answer(results, "live", page);
@@ -458,7 +495,7 @@ export async function callTool(
         const page = pageOf(limit, offset, 50, 200);
         const htYear = year ?? new Date().getFullYear();
         const local = await localListHearingTranscripts(htYear, page.limit, page.offset);
-        const localResp = await localResponse(local, "transcripts", page);
+        const localResp = await localResponse(local, "transcripts", page, localOrderLine("newest first"));
         if (localResp) return localResp;
         const results = await listHearingTranscripts(apiKey, htYear, page.limit, page.offset);
         return answer(results, "live", page);

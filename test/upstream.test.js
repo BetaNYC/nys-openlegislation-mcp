@@ -147,3 +147,29 @@ test("bad arguments are named in a sentence, not a JSON dump", async () => {
   assert.match(text(r), /^Error: Invalid arguments for search_bills: limit: .+\. Fix them and call search_bills again\.$/);
   assert.doesNotMatch(text(r), /"code"/);
 });
+
+test("a network failure with no code gives only the first plain line of its cause", async () => {
+  mock.method(globalThis, "fetch", async () => {
+    throw new TypeError("fetch failed", {
+      cause: new Error("socket hang up\n    at TLSSocket.onClose (node:internal/tls/wrap:1:2)\nsecond line from /home/someone/app.js"),
+    });
+  });
+  const r = await callTool(KEY, "get_bill", { print_no: "S1", session_year: 2025 });
+  assert.equal(r.isError, true);
+  assert.match(text(r), /^Error: Could not reach the Open Legislation API \(socket hang up\)\. Check the network connection/);
+  assert.doesNotMatch(text(r), /second line|\/home\/|^\s+at /m);
+});
+
+// A key whose URL-encoded and form-encoded forms differ (a space is %20 in one and + in the other;
+// "!" is kept by encodeURIComponent and encoded by URLSearchParams): each form must be redacted.
+test("a key with a space and '!' is redacted raw, URL-encoded and form-encoded", async () => {
+  const key = "my sekret key!42";
+  const forms = [key, encodeURIComponent(key), new URLSearchParams({ k: key }).toString().slice(2)];
+  assert.notEqual(forms[1], forms[2], "the two encodings differ for this key");
+  mockFetch(fail(400, `echo: ${forms.join(" | ")}`));
+  const r = await callTool(key, "get_bill", { print_no: "S1", session_year: 2025 });
+  const t = text(r);
+  assert.equal(r.isError, true);
+  for (const f of forms) assert.ok(!t.includes(f), `leaked ${f}: ${t}`);
+  assert.equal(t.split("[redacted]").length - 1, 3, t);
+});

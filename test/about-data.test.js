@@ -151,7 +151,11 @@ test("about_data over stdio, with no key: live is not available, the copy gives 
     const corpus = r.structuredContent.sources.find((s) => s.topic === "corpus");
     assert.equal(live.as_of_status, "unavailable");
     assert.match(live.as_of, /no NYS_LEGISLATION_API_KEY/);
-    assert.equal(corpus.as_of, "2026-10-22T04:00:00Z");
+    // The sync time is only for the synced types; the others give their own date or "not recorded".
+    assert.equal(corpus.as_of, "bills, agendas and calendars: 2026-10-22T04:00:00Z (the last sync; only these are synced). " +
+      "The sync does not update the rest; laws: not recorded (from the last full download); members: not recorded (from the last full download); " +
+      "committees: not recorded (from the last full download); transcripts: not recorded (from the last full download)");
+    assert.ok(r.content[0].text.includes(`How current on this server: ${corpus.as_of}`), "the text says the same");
     assert.equal(r.structuredContent.contact_email, "lab@beta.nyc");
     assert.match(r.content[0].text, /^BetaNYC modified this data: reshaped it\. This copy should not be considered the official record\. Official record: Open Legislation API \(New York State Senate\), https:\/\/legislation\.nysenate\.gov\/static\/docs\/html\/index\.html$/m);
   } finally {

@@ -27,8 +27,9 @@ function mockFetch(envelope) {
 }
 
 const text = (r) => r.content[0].text;
-// Shared module 1.5.1: the fetch time in New York time, to the minute.
-const SOURCE_LIVE = /^Source: .*Open Legislation API.*New York State Senate.*\. Fetched from the source for this answer at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) E[SD]T \(New York time\)\. Link: https:\/\/legislation\.nysenate\.gov\/$/m;
+// Shared module 1.5.2: what BetaNYC did (as about_data says it for "live"), the fetch time in New
+// York time to the minute, and the official record's link (eval/run.js holds the pattern).
+const { LIVE_SOURCE_LINE: SOURCE_LIVE } = await import("../eval/run.js");
 const nyMinute = (ms) => new Intl.DateTimeFormat("sv-SE", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(ms));
 
 test("a live answer names the source, links to it, and gives the retrieval time", async () => {

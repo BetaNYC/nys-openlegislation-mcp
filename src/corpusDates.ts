@@ -66,3 +66,49 @@ export async function corpusDateFor(type: CorpusType): Promise<CorpusDate> {
   }
   return corpusDate(type, state);
 }
+
+/** The local copy's "How current" for about_data, per data type: the sync time (as the shared
+ * module reported it) only for the types the sync refreshes, and each other type's own download
+ * date, or that it is not recorded. */
+export function typeDatesSentence(syncAsOf: string, state: Record<string, string> | null): string {
+  const others = (["laws", "members", "committees", "transcripts"] as const).map((t) => {
+    const d = corpusDate(t, state);
+    return `${t}: ${d.asOf ? `downloaded ${d.asOf}` : "not recorded (from the last full download)"}`;
+  });
+  return `bills, agendas and calendars: ${syncAsOf} (the last sync; only these are synced). ` +
+    `The sync does not update the rest; ${others.join("; ")}`;
+}
+
+type AboutDataResult = {
+  content: Array<{ type: string; text?: string }>;
+  structuredContent?: { sources?: Array<{ topic?: string; title?: string; as_of?: string }> } & Record<string, unknown>;
+  isError?: boolean;
+};
+
+/** about_data's answer with the local copy's "How current on this server" given per data type
+ * (typeDatesSentence), in the text and in structuredContent's as_of. The shared module's
+ * freshness hook takes one date only, so the server rewrites that one line. A copy that is not
+ * available on this server is left as the module reports it. */
+export async function withTypeDates<R extends AboutDataResult>(result: R): Promise<R> {
+  const corpus = result.structuredContent?.sources?.find((s) => s.topic === "corpus");
+  if (result.isError || !corpus || typeof corpus.as_of !== "string" || corpus.as_of.startsWith("not available on this server")) {
+    return result;
+  }
+  let state: Record<string, string> | null = null;
+  try {
+    state = await getSyncState();
+  } catch {
+    state = null;
+  }
+  const before = corpus.as_of;
+  const after = typeDatesSentence(before, state);
+  const head = `${corpus.title} [topic: corpus]`;
+  const content = result.content.map((c) => {
+    if (c.type !== "text" || typeof c.text !== "string") return c;
+    const blocks = c.text.split("\n\n").map((b) =>
+      b.startsWith(head) ? b.replace(`How current on this server: ${before}`, `How current on this server: ${after}`) : b);
+    return { ...c, text: blocks.join("\n\n") };
+  });
+  const sources = result.structuredContent!.sources!.map((s) => (s === corpus ? { ...s, as_of: after } : s));
+  return { ...result, content, structuredContent: { ...result.structuredContent, sources } };
+}

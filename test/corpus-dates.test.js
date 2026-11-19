@@ -37,7 +37,9 @@ if (Database) {
   db.exec(`
     CREATE TABLE bills (session_year INTEGER, print_no TEXT, raw_json TEXT, published_date TEXT);
     CREATE TABLE law_trees (law_id TEXT, raw_json TEXT, tree_json TEXT);
-    CREATE TABLE members (member_id INTEGER, session_year INTEGER, chamber TEXT, short_name TEXT, district INTEGER, raw_json TEXT);
+    CREATE TABLE law_sections (law_id TEXT, location_id TEXT, title TEXT, doc_type TEXT, has_text INTEGER, raw_json TEXT);
+    CREATE VIRTUAL TABLE bills_fts USING fts5(title);
+    CREATE TABLE members (member_id INTEGER, session_year INTEGER, chamber TEXT, short_name TEXT, district INTEGER, raw_json TEXT, full_name TEXT);
     CREATE TABLE committees (session_year INTEGER, chamber TEXT, name TEXT, raw_json TEXT);
     CREATE TABLE agendas (year INTEGER, agenda_no INTEGER, raw_json TEXT);
     CREATE TABLE calendars (year INTEGER, calendar_no INTEGER, raw_json TEXT);
@@ -45,9 +47,14 @@ if (Database) {
     CREATE TABLE hearing_transcripts (year INTEGER, filename TEXT, date TEXT, has_text INTEGER, raw_json TEXT);
     CREATE TABLE sync_state (key TEXT PRIMARY KEY, value TEXT);
   `);
-  db.prepare("INSERT INTO bills VALUES (?, ?, ?, ?)").run(2025, "S1", j({ basePrintNo: "S1" }), "2025-01-01");
+  db.prepare("INSERT INTO bills (rowid, session_year, print_no, raw_json, published_date) VALUES (1, ?, ?, ?, ?)").run(2025, "S1", j({ basePrintNo: "S1" }), "2025-01-01");
+  db.prepare("INSERT INTO bills_fts (rowid, title) VALUES (1, ?)").run("climate bill");
   db.prepare("INSERT INTO law_trees VALUES (?, ?, ?)").run("EDN", j({ lawId: "EDN" }), j({ tree: "EDN" }));
-  db.prepare("INSERT INTO members VALUES (?, ?, ?, ?, ?, ?)").run(1, 2025, "SENATE", "ALPHA", 1, j({ memberId: 1 }));
+  db.prepare("INSERT INTO law_sections VALUES (?, ?, ?, ?, ?, ?)").run("EDN", "6233", "t", "SECTION", 1, j({ lawId: "EDN", locationId: "6233", docType: "SECTION", text: "x" }));
+  // ALPHA: the Senate's record has a fullName, and ours differs: theirs must win.
+  db.prepare("INSERT INTO members VALUES (?, ?, ?, ?, ?, ?, ?)").run(1, 2025, "SENATE", "ALPHA", 1, j({ memberId: 1, chamber: "SENATE", fullName: "Senate's Name" }), "Our Name");
+  // BRAVO: the Senate's record has none: ours fills it, and says so.
+  db.prepare("INSERT INTO members VALUES (?, ?, ?, ?, ?, ?, ?)").run(2, 2025, "SENATE", "BRAVO", 2, j({ memberId: 2, chamber: "SENATE" }), "Filled Name");
   db.prepare("INSERT INTO committees VALUES (?, ?, ?, ?)").run(2025, "SENATE", "Finance", j({ name: "Finance" }));
   db.prepare("INSERT INTO agendas VALUES (?, ?, ?)").run(2025, 1, j({ agendaNo: 1 }));
   db.prepare("INSERT INTO calendars VALUES (?, ?, ?)").run(2025, 7, j({ calendarNo: 7 }));
@@ -76,8 +83,11 @@ afterEach(() => mock.restoreAll());
 
 const text = (r) => r.content[0].text;
 const payloadOf = (r) => JSON.parse(text(r).split("\n\n---\n")[0]);
-const asOfLine = (d) => new RegExp(`^Source: .*New York State Senate.*\\. As of ${d.replace(/[+.]/g, "\\$&")} \\(the date of the copy this server answers from\\)\\.`, "m");
-const UNKNOWN = /^Source: .*New York State Senate.*\. As of: unknown \(this server has no usable date for it\)\./m;
+// Shared module 1.5.2: what BetaNYC did to the local copy, its date, and the official record.
+const LOCAL_HEAD = String.raw`^BetaNYC modified this data: a copy of the Senate's Open Legislation data that BetaNYC saved and indexed on this machine; searching it and the order of its lists are BetaNYC's own, not the Senate's\. This copy should not be considered the official record\. `;
+const TAIL = String.raw` Official record: Open Legislation API \(New York State Senate\), https:\/\/legislation\.nysenate\.gov\/$`;
+const asOfLine = (d) => new RegExp(`${LOCAL_HEAD}As of ${d.replace(/[+.]/g, "\\$&")} \\(the date of the copy this server answers from\\)\\.${TAIL}`, "m");
+const UNKNOWN = new RegExp(`${LOCAL_HEAD}As of: unknown \\(this server has no usable date for it\\)\\.${TAIL}`, "m");
 
 const CASES = {
   bills: ["list_bills", { session_year: 2025 }],
@@ -88,6 +98,10 @@ const CASES = {
   committees: ["list_committees", { chamber: "senate", session_year: 2025 }],
   floor_transcripts: ["list_floor_transcripts", { year: 2025 }],
   hearing_transcripts: ["list_hearing_transcripts", { year: 2025 }],
+  // The single-item tools: each must read its own type's date, not the bills' sync time.
+  law_section: ["get_law_section", { law_id: "EDN", location_id: "6233" }],
+  floor_transcript: ["get_floor_transcript", { date_time: "2025-01-01T11:00" }],
+  hearing_transcript: ["get_hearing_transcript", { filename: "h.txt" }],
 };
 async function call(type, key = null) {
   const [name, args] = CASES[type];
@@ -106,9 +120,9 @@ for (const type of ["bills", "agendas", "calendars"]) {
   });
 }
 
-for (const [type, at] of [["laws", LAWS_AT], ["members", MEMBERS_AT]]) {
-  test(`${type}: the sync does not refresh them, so the answer gives their download time`, { skip }, async () => {
-    const r = await call(type);
+for (const [tool, at, type] of [["laws", LAWS_AT, "laws"], ["members", MEMBERS_AT, "members"], ["law_section", LAWS_AT, "laws"]]) {
+  test(`${tool}: the sync does not refresh them, so the answer gives their download time`, { skip }, async () => {
+    const r = await call(tool);
     assert.match(text(r), asOfLine(at));
     assert.ok(!text(r).includes(SYNCED), "the sync time must not appear");
     assert.match(text(r), new RegExp(`^The nightly sync does not update ${type}: this copy of them was downloaded ${at.replace(/[+.]/g, "\\$&")}\\.$`, "m"));
@@ -117,8 +131,8 @@ for (const [type, at] of [["laws", LAWS_AT], ["members", MEMBERS_AT]]) {
   });
 }
 
-for (const type of ["committees", "floor_transcripts", "hearing_transcripts"]) {
-  const word = type.endsWith("transcripts") ? "transcripts" : type;
+for (const type of ["committees", "floor_transcripts", "hearing_transcripts", "floor_transcript", "hearing_transcript"]) {
+  const word = /transcripts?$/.test(type) ? "transcripts" : type;
   test(`${type}: no recorded download time, so the answer says so, not the sync time`, { skip }, async () => {
     const r = await call(type);
     assert.match(text(r), UNKNOWN);
@@ -177,4 +191,57 @@ test("fetch-data.js records when it downloaded each type it fetched, and only th
     assert.equal(rows[`fetched_at_${t}`], undefined, `${t} was not downloaded, so it gets no date`);
   }
   assert.ok(rows.last_synced_at, "the sync watermark is still written");
+});
+
+test("local search_bills: BetaNYC's score is apart from the Senate's rank, and the order is said to be ours", { skip }, async () => {
+  const r = await callTool(null, "search_bills", { term: "climate", session_year: 2025 });
+  assert.notEqual(r.isError, true, text(r));
+  const item = payloadOf(r).items[0];
+  assert.equal(item.result.basePrintNo, "S1");
+  assert.equal(typeof item.betanyc.search_score, "number");
+  assert.ok(!("rank" in item), "the Senate's field name is not used for our score");
+  assert.match(text(r), /^Order: BetaNYC's own local search \(its match score is in betanyc\.search_score\), not the Senate's search/m);
+});
+
+test("local search_members keeps the Senate's fullName and fills only a missing one, saying so", { skip }, async () => {
+  const r = await callTool(null, "search_members", { term: "a", chamber: "senate", session_year: 2025 });
+  const items = payloadOf(r).items;
+  const alpha = items.find((m) => m.memberId === 1);
+  const bravo = items.find((m) => m.memberId === 2);
+  assert.equal(alpha.fullName, "Senate's Name", "never overwrite the publisher's field");
+  assert.equal(alpha.betanyc, undefined, "nothing filled, nothing to say");
+  assert.equal(bravo.fullName, "Filled Name");
+  assert.deepEqual(bravo.betanyc.filled, ["fullName"]);
+});
+
+test("a local list says its order is the local copy's own; a single item does not", { skip }, async () => {
+  for (const [tool, how] of [["bills", "newest published first"], ["members", "by short name"], ["committees", "by name"],
+    ["agendas", "highest agenda number first"], ["calendars", "highest calendar number first"],
+    ["floor_transcripts", "newest first"], ["hearing_transcripts", "newest first"]]) {
+    const r = await call(tool);
+    assert.match(text(r), new RegExp(`^Order: the local copy's own \\(${how}\\), which can differ from the Senate's, so page 1 here may not be the Senate's page 1\\.$`, "m"), tool);
+  }
+  assert.doesNotMatch(text(await call("law_section")), /^Order:/m);
+});
+
+test("about_data's local copy: the sync time only for synced types, each other type's own date", async () => {
+  const { typeDatesSentence } = await import("../dist/corpusDates.js");
+  const s = typeDatesSentence(SYNCED, { last_synced_at: SYNCED, fetched_at_laws: LAWS_AT });
+  assert.equal(s, `bills, agendas and calendars: ${SYNCED} (the last sync; only these are synced). The sync does not update the rest; ` +
+    `laws: downloaded ${LAWS_AT}; members: not recorded (from the last full download); committees: not recorded (from the last full download); ` +
+    "transcripts: not recorded (from the last full download)");
+});
+
+test("DATA-SOURCES.json lists what BetaNYC adds or chooses", async () => {
+  const { readFileSync } = await import("node:fs");
+  const ds = JSON.parse(readFileSync(join(ROOT, "DATA-SOURCES.json"), "utf8"));
+  const live = ds.sources.find((x) => x.id === "live").changes.detail;
+  const corpus = ds.sources.find((x) => x.id === "corpus").changes.detail;
+  assert.match(live, /empty vote list/, "get_bill_votes' empty list is an addition");
+  assert.match(corpus, /order/i);
+  assert.match(corpus, /betanyc\.search_score/);
+  assert.match(corpus, /betanyc\.filled/);
+  const gaps = ds.sources.find((x) => x.id === "corpus").coverage.known_gaps.join(" ");
+  assert.doesNotMatch(gaps, /, and is only as current as its last sync/, "the whole copy is not as current as the sync");
+  assert.match(gaps, /Its bills, agendas and calendars are only as current as its last sync/);
 });

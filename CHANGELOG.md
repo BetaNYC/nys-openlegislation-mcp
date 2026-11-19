@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Adds `about_data`, the third tool BetaNYC is adding to each of its MCP servers, and moves to
 shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betanyc-ai-workspace#1655 and #1672 (epic #1652).
 
+### Breaking
+
+- **The text at the end of every data answer changed** (shared module 1.5.1 and 1.5.2).
+  It was `Source: Open Legislation API (New York State Senate). As of <ISO time in UTC>
+  (fetched from the source for this answer). Link: https://legislation.nysenate.gov/`.
+  It is now `BetaNYC modified this data: <what BetaNYC did>. This copy should not be
+  considered the official record. Fetched from the source for this answer at
+  2026-11-18 13:05 EST (New York time). Official record: Open Legislation API (New York
+  State Senate), https://legislation.nysenate.gov/`: New York time, to the minute, with
+  no ISO time and no `Source:` or `Link:` label. An answer from the local copy has the
+  same frame, with `As of <date> (the date of the copy this server answers from).` or
+  `As of: unknown …`. Anything that reads the time, or looks for `Source:` or `Link:`,
+  out of the text will break.
+- **Local `search_bills` results no longer have a `rank` field.** The Senate's own search
+  results carry `rank`; the local copy's SQLite full-text score was put under the same
+  name. It is now `betanyc.search_score` (lower is a closer match), and the answer says
+  the order is BetaNYC's local search, not the Senate's.
+- **Local `search_members` no longer replaces the Senate's `fullName` or `chamber`.** It
+  fills them only when the Senate's member record lacks them, and lists what it filled in
+  `betanyc.filled`.
+
 ### Added
 
 - `about_data`: where this server's data comes from, answered from the new
@@ -41,7 +62,7 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
 ### Changed
 
 - 27 tools instead of 26.
-- Shared module 1.5.1: `src/betanyc-tools.ts` is BetaNYC's shared module 1.5.1, and
+- Shared module 1.5.2: `src/betanyc-tools.ts` is BetaNYC's shared module 1.5.2, and
   `scripts/whats_changed.py` and the about-data validator kit
   (`scripts/tests/catalog_validate.py`, `scripts/mcp_shared/data-sources.schema.json`)
   are those of `whats_changed.py` 1.4.1, all copied in unchanged
@@ -53,9 +74,13 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
   boolean)` lets a tool's own hint win; `provenance()` gives a live answer's fetch time in
   New York time to the minute and labels a live `asOf` as the data's own date (new fields
   `as_of_kind: "source"` and `retrieved_at`), and refuses links with a username or
-  password and names with control characters; `toolError` passes the caller's message on
-  unfiltered, redacts more encoded forms of a secret, and ignores secrets under 8
-  characters.
+  password and names with control characters; `toolError` redacts more encoded forms of
+  a secret and ignores secrets under 8 characters. 1.5.2 (canonical commit `bbc1671`;
+  raw file sha256 `bcc117e7…`, 125,208 bytes; the file's own stamp, the sha256 without its
+  stamp line, is `eb29cbfb…`): `toolError` drops stack-frame lines from the caller's
+  message too and caps it at 1,000 characters; new `errorSummary(err, max)` gives the
+  first plain line of an unknown error; `provenance()` takes `changedByBetanyc` and then
+  says, in `about_data`'s own words, that BetaNYC modified or produced the data.
 - Every tool now declares `annotations` (`annotateTools`, #31): `readOnlyHint: true`,
   a `title`, and `openWorldHint` (true for the 24 Open Legislation tools, which may
   call the live API; false for the three shared tools). `test/tool-list.test.js`
@@ -78,16 +103,23 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
   only as the `key` query parameter (API Conventions, "Base URL and API key"), so it
   stays there. `test/upstream.test.js` covers all three.
 - Every data answer names its source and how current it is (#33, #34): after the JSON,
-  a line from the shared `provenance()`, "Source: Open Legislation API (New York State
-  Senate). … Link: https://legislation.nysenate.gov/", with the fetch time (New York time)
-  for a live call. For a local one it gives the date of that type of data
+  a line from the shared `provenance()` (see Breaking for its words). It says what
+  BetaNYC did to the data, in the words `about_data` uses: for a live answer, that it is
+  passed on as the API returns it with additions that change no value (paging totals,
+  links to nysenate.gov, an empty vote list for a bill with none); for the local copy,
+  that it is a copy BetaNYC saved and indexed, whose search and list order are BetaNYC's
+  own. Then the official record, https://legislation.nysenate.gov/, and the fetch time
+  (New York time) for a live call. For a local one it gives the date of that type of data
   (`src/corpusDates.ts`): `last_synced_at` for bills, agendas and calendars, the only
   types `scripts/sync.js` refreshes; for laws, members, committees and transcripts, the
   time `scripts/fetch-data.js` last downloaded that type, which it now records as
   `sync_state.fetched_at_<type>`. A copy with no such time says the date is not
   recorded and that the data comes from the last full download, never the sync time
   ("As of: unknown" when there is no readable date). `test/corpus-dates.test.js` covers
-  each type. It replaces the disclaimer's "Data sourced from"
+  each type, and every single-item tool. `about_data`'s "How current on this server" for
+  the local copy says the same per type, not the sync time for everything. A list from the
+  local copy also says its order is the copy's own (for example, bills newest published
+  first), so its page 1 can differ from the Senate's. It replaces the disclaimer's "Data sourced from"
   sentence; the caveat to verify at legislation.nysenate.gov stays.
 - Lists (#35): every list tool's `limit` now has a maximum, stated in its schema
   (`search_bills`, `search_members`, `get_committee_meetings`, `search`: 100;
@@ -120,6 +152,15 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
   hook reads the local copy asynchronously.
 
 ### Fixed
+
+- **`fetch-data.js` saved a download date even when the download failed.** `fetchLaws`
+  and `fetchTranscripts` carry on past a failed item; the date was saved anyway, so old
+  data claimed the new date. A type's date is now saved only when every item came
+  through; otherwise the run exits non-zero and says how many items failed and what to
+  run again. `test/fetch-data-dates.test.js` covers laws and transcripts with every,
+  some and no request failing.
+- A network error with no error code showed the whole cause message, stack lines
+  included. It now shows only its first plain line (shared `errorSummary`).
 
 - **Live paging repeated one result (since 1.0.0, #36).** The tools' `offset` counts
   from 0, but the API's counts from 1 (API Conventions, "Paging"), and it was sent

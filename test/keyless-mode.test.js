@@ -235,7 +235,8 @@ test(
     assert.equal(payload.title, "A fixture bill", "the actual data must still be served");
     // Every data answer names its source, links to it and says how current it is (#33, #34):
     // for the local copy, the copy's sync time.
-    assert.match(text, /^Source: .*New York State Senate.*\. As of 2026-07-21T10:30:07Z \(the date of the copy this server answers from\)\. Link: https:\/\/legislation\.nysenate\.gov\/$/m);
+    // Shared module 1.5.2: the answer says BetaNYC modified the data, as about_data does.
+    assert.match(text, /^BetaNYC modified this data: a copy of the Senate's Open Legislation data that BetaNYC saved and indexed on this machine; .+ This copy should not be considered the official record\. As of 2026-07-21T10:30:07Z \(the date of the copy this server answers from\)\. Official record: Open Legislation API \(New York State Senate\), https:\/\/legislation\.nysenate\.gov\/$/m);
   }
 );
 

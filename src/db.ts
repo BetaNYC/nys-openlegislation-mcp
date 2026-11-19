@@ -117,7 +117,10 @@ export function localSearchBills(
          LIMIT ? OFFSET ?`
       )
       .all(term, ...(sessionYear ? [sessionYear] : []), limit, offset) as Array<{ raw_json: string; rank: number }>;
-    const items = rows.map((r) => ({ result: JSON.parse(r.raw_json), rank: r.rank }));
+    // The Senate's own search results carry a `rank` (bills.html, "Search for bills"). This
+    // score is BetaNYC's local full-text match (SQLite FTS5; lower is a closer match), so it is
+    // kept apart, under `betanyc`, never under the Senate's field name.
+    const items = rows.map((r) => ({ result: JSON.parse(r.raw_json), betanyc: { search_score: r.rank } }));
     return { items, size: items.length };
   });
 }
@@ -208,9 +211,17 @@ export function localSearchMembers(
          ORDER BY session_year DESC, short_name LIMIT ? OFFSET ?`
       )
       .all(...params, limit, offset) as Array<{ raw_json: string; chamber: string; full_name: string | null }>;
+    // The Senate's own fields win. BetaNYC fills `chamber` and `fullName` only when the member
+    // record lacks them (fullName from the member's most recent sponsored bill), and names the
+    // fields it filled in `betanyc.filled`.
     const items = rows.map((r) => {
       const m = JSON.parse(r.raw_json);
-      return { ...m, chamber: r.chamber, fullName: r.full_name ?? m.fullName ?? null };
+      const filled: string[] = [];
+      const out = { ...m };
+      if (m.chamber == null && r.chamber != null) { out.chamber = r.chamber; filled.push("chamber"); }
+      if (m.fullName == null && r.full_name != null) { out.fullName = r.full_name; filled.push("fullName"); }
+      if (out.fullName === undefined) out.fullName = null;
+      return filled.length ? { ...out, betanyc: { ...(m.betanyc ?? {}), filled } } : out;
     });
     return { items, size: items.length };
   });

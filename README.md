@@ -39,6 +39,8 @@ The server refuses to start only when **both** the key and the corpus are missin
 
 Bill URLs returned by this server point to the public [nysenate.gov](https://www.nysenate.gov/legislation) website — no login required.
 
+**How the server talks to the API.** The key is read only from `NYS_LEGISLATION_API_KEY`. The API accepts it only as the `key` query parameter, so it is part of each request URL; the server removes it from every error message it returns. Requests follow the API's [rate-limit guidance](https://legislation.nysenate.gov/static/docs/html/getting_started.html#rate-limits) (limits per key from December 1, 2026): one request at a time, at least 0.1 seconds apart; a 30-second timeout, with no resend of a slow request; at most two retries, only after HTTP 429 or 503, waiting at least as long as `Retry-After` asks. Each request sends a User-Agent naming this package and its version. The server never polls in the background. Errors are a plain sentence saying what went wrong and what to try, with at most 500 characters of the API's own reply (`src/http.ts`, `src/handlers.ts`).
+
 ---
 
 ## Installation
@@ -125,7 +127,7 @@ NYS_LEGISLATION_API_KEY=your-key node scripts/fetch-data.js
 | `--delay-ms=N` | `150` | Delay between API calls in ms |
 | `--dry-run` | off | Print what would be fetched without writing |
 
-The corpus lands in `data/corpus.db` (override the location with the `NYS_CORPUS_DB` environment variable — both the server and the scripts honor it). A full fetch without law or transcript text takes **2–6 hours** depending on your start year and network speed. The `--types` flag lets you fetch only what you need.
+The corpus lands in `data/corpus.db` (override the location with the `NYS_CORPUS_DB` environment variable — both the server and the scripts honor it). `fetch-data.js` saves when it downloaded each type, but only when every item of that type came through: if any law, transcript list or other item fails, that type keeps its earlier date (or none), and the run ends with a non-zero exit code and a line saying how many items failed and the command to run again. A full fetch without law or transcript text takes **2–6 hours** depending on your start year and network speed. The `--types` flag lets you fetch only what you need.
 
 ### 2. Run incremental sync (nightly)
 
@@ -150,14 +152,14 @@ The Senate's API reads every time as New York local time. Each sync asks for the
 
 ### How local-first works
 
-When `data/corpus.db` exists and `better-sqlite3` is available, every tool handler queries the local DB first. If the record is found locally, it returns immediately without an API call, annotated with `"source": "local corpus (synced <date>)"` so staleness is visible. If the record is not found — or the local result is **empty** (0 items) — it falls through to the live API transparently; an empty local slice never shadows live data.
+When `data/corpus.db` exists and `better-sqlite3` is available, every tool handler queries the local DB first. If the record is found locally, it returns immediately without an API call, annotated with a `source` note so staleness is visible: `"local corpus (synced <date>)"` for bills, agendas and calendars, which the sync refreshes, and the date that type was downloaded for laws, members, committees and transcripts, which it does not (see "Data disclaimer"). If the record is not found — or the local result is **empty** (0 items) — it falls through to the live API transparently; an empty local slice never shadows live data.
 
 Law section text and transcript full text fall back to the API unless `--include-law-text` / `--include-transcript-text` were used during the initial fetch.
 
 ### Known limitations
 
 - **Committees go stale between full fetches.** The incremental sync consumes the aggregate updates feed, which only carries `AGENDA` / `BILL` / `CALENDAR` / `LAW` content types — committee changes never appear in it. Re-run `fetch-data.js --types=committees` periodically (it is a quick fetch) to refresh committee data.
-- **Law and transcript text** are not incrementally synced; re-run `fetch-data.js` for those periodically.
+- **Laws, members and transcripts** are not incrementally synced either; re-run `fetch-data.js --types=laws` (or `members`, `transcripts`) periodically. Since this release `fetch-data.js` records when it downloaded each type, and answers give that date.
 - **Member full names** come from bill sponsor records already in the corpus, filled in by `npm run sync` and `fetch-data.js` (no extra API calls). A corpus built before this change gains the `members.full_name` column on its next sync. A member who has never prime-sponsored a bill in the corpus has no full name locally.
 - **Local results carry no `total`.** Paginated results served from the local corpus return `items` and `size` only; the `total`, `offsetStart`, `offsetEnd` and `limit` fields come from the live API.
 
@@ -170,6 +172,11 @@ Passing an undeclared key returns an error naming both the offending key and the
 parameters that tool accepts. This is deliberate: silently dropping a filter
 returns real, correctly-sourced data that answers a *different* question, and
 nothing in the response would signal it.
+
+Every tool is marked read-only (`readOnlyHint: true`); none changes anything. The
+Open Legislation tools are also marked `openWorldHint: true`, since they may call
+the live API; the three tools under "About this server" read only this package's
+own files.
 
 ### Bills
 
@@ -277,6 +284,13 @@ NYS legislative sessions run in two-year cycles beginning in odd-numbered years.
 
 Results are sourced from the NYS Open Legislation API, maintained by the New York State Senate. Bill text, status, vote records, and law content reflect official legislative data but may be subject to correction or amendment. Verify critical information at [legislation.nysenate.gov](https://legislation.nysenate.gov).
 
+Every data answer ends with the same few lines: for a list, which results it shows, of how many when the API says, and the `offset` for the next page; then a source line saying what BetaNYC did to the data (the same answer `about_data` gives), how current the data is, and the official record: the Open Legislation API of the New York State Senate, with a link to [legislation.nysenate.gov](https://legislation.nysenate.gov/); then the caveat above. A live answer reads "BetaNYC modified this data: passed on as the Senate's Open Legislation API returns it, with additions that change no value: … Fetched from the source for this answer at 2026-11-18 13:05 EST (New York time). Official record: …". An answer from the local copy says it is a copy BetaNYC saved and indexed, and that its search and list order are BetaNYC's own. A list from the local copy also says its order is the copy's own (for example, bills newest published first), so its page 1 may not be the Senate's page 1. Local `search_bills` results carry BetaNYC's match score as `betanyc.search_score`, never under the Senate's `rank`. Local `search_members` keeps the Senate's own fields; it fills a missing `chamber` or `fullName` only when the Senate's record lacks it, and names what it filled in `betanyc.filled`. `offset` counts from 0 (the number of results to skip) in every tool, live or local. Each list tool has a default `limit` and a maximum, stated in its description. A larger whole-number `limit` is lowered to the maximum, and the paging line says so ("limit lowered to 200, the most this tool returns"). A `limit` under 1, a negative `offset`, or a number that is not whole is refused with a short message saying what is allowed. A short list from the local copy says it is "all the local copy has", since the copy may lack records the Senate has.
+
+**How current is it?** A live answer gives the time it was fetched, in New York time. An answer from the local copy gives the date of that kind of data:
+
+- **Bills, agendas and calendars:** the nightly sync (`scripts/sync.js`) keeps these current from the API's updates feed, so the answer gives the time of the last sync.
+- **Laws, members, committees and transcripts:** the nightly sync does not touch these. They change in the copy only when `scripts/fetch-data.js` downloads them again, so the answer gives the time that download started (stored per type as `fetched_at_<type>`), and says the sync does not update them. A copy downloaded before this was recorded has no such date: the answer then says the date is not recorded and that the data comes from the last full download. It never shows the sync time for these, and never guesses a date: not in a data answer, and not in `about_data`, whose "How current on this server" for the local copy gives the sync time for bills, agendas and calendars only and each other type's own download date, or "not recorded". Re-running `fetch-data.js --types=<type>` records it.
+
 ---
 
 ## Tests
@@ -291,6 +305,8 @@ npm run test:live   # real calls to the NYS Open Legislation API; needs a key
 `npm test` covers everything under `test/`. It never touches the network, **regardless of whether `NYS_LEGISLATION_API_KEY` is set** — that is enforced by a directory boundary (`test/live/` is outside the default glob) and guarded by `test/offline-by-default.test.js`.
 
 `npm run test:live` runs the smoke tests in `test/live/`, which make one read-only GET per searchable type. Without a key it fails with setup instructions rather than skipping, because reaching it means you asked for it.
+
+`npm run eval` runs the evaluation set in `eval/questions.json`: 12 questions a person would ask (who sponsored a bill, how a member voted, the second page of a listing, which link to cite for a law article), each with a known answer, written before scoring. It runs offline: each answer comes from a fixture copied from the example responses in the API's own documentation, so it checks that each tool sends the documented request path and parameters, passes through the fields the question asks about (a sponsor, a status, a vote) from the fixture, and ends with the right paging line and source line, and that bad requests fail with the right error. It does not check a fact against the live service, and it does not test a model's choice of tool. Results go to `eval/runs/`. `npm test` runs the same set (`test/eval.test.js`), and `test/stdout.test.js` checks that the server writes only protocol messages to stdout.
 
 This split exists because the previous arrangement gated the live test on the API key being present, which meant a machine configured to *run* this server also made live requests on a plain `npm test`. Having a key is not the same as intending to use it.
 

@@ -42,7 +42,7 @@
         "steps": [
           "reshaped"
         ],
-        "detail": "Passed on as the API returns it, with three additions that change no value: the paging totals the API puts beside a list of results are copied in with the results, each bill gets a link to its page on nysenate.gov, and each law document gets a link to the law on nysenate.gov."
+        "detail": "Passed on as the API returns it, with three additions that change no value: the paging totals the API puts beside a list of results are copied in with the results, each bill gets a link to its page on nysenate.gov, each law document gets a link to the law on nysenate.gov, and get_bill_votes gives an empty vote list (items: [], size: 0) for a bill whose answer has no votes, where the API leaves the field out. Each answer says BetaNYC modified the data, as here, and links to the official record."
       },
       "verify_at": "https://legislation.nysenate.gov/",
       "freshness": {
@@ -94,7 +94,7 @@
       "caveats": [
         "Bill text, status, votes and law text are official legislative data but may be corrected or amended later. Check anything important at legislation.nysenate.gov.",
         "Dates and times in the API's answers are New York local time, written without a time zone.",
-        "When this server also has a local copy (topic corpus), most tools answer from that copy first and ask the API only when the copy has nothing. An answer from the copy says so and gives the date it was last synced."
+        "When this server also has a local copy (topic corpus), most tools answer from that copy first and ask the API only when the copy has nothing. An answer from the copy says so and gives the date of that kind of data: the last sync for bills, agendas and calendars, the last download for the rest."
       ],
       "corrections": []
     },
@@ -115,7 +115,7 @@
         "steps": [
           "reshaped"
         ],
-        "detail": "Each item is the API's own JSON, saved and read back unchanged, with a note on each answer giving the time the copy was last synced. search_members adds each member's chamber and full name, taken from the Senate's own records: the full name is the one on the member's most recent sponsored bill, used for every session, because the member list does not carry it."
+        "detail": "Each item is the API's own JSON, saved and read back unchanged, with a note on each answer giving how current that kind of data is: the time of the last sync for bills, agendas and calendars, and for laws, members, committees and transcripts the time they were last downloaded, or that this was not recorded. BetaNYC indexes the copy and chooses its order: lists are sorted by BetaNYC (bills newest published first, members and committees by name, agendas and calendars highest number first, transcripts newest first), so a page can differ from the Senate's page with the same offset, and each list answer says so. search_bills answers from BetaNYC's own full-text search; its order and its score (betanyc.search_score) are BetaNYC's, not the Senate's search or rank. search_members keeps every field of the Senate's member record; only when the record lacks a chamber or full name does BetaNYC fill it (the full name from the member's most recent sponsored bill, used for every session) and name the field in betanyc.filled. Each answer says BetaNYC modified the data and links to the official record."
       },
       "verify_at": "https://legislation.nysenate.gov/",
       "freshness": {
@@ -129,11 +129,12 @@
         "geography": "New York State Legislature (Senate and Assembly)",
         "known_gaps": [
           "Committees, committee meetings, floor calendars, agendas and floor transcripts are the Senate's only. The Senate does not say how far back each kind of data goes.",
-          "The copy starts at the session year chosen when it was built (2009 unless the person who built it chose otherwise), and is only as current as its last sync.",
-          "Committees are not picked up by the sync, because the API's change feed does not carry them; they are as current as the last full download.",
+          "The copy starts at the session year chosen when it was built (2009 unless the person who built it chose otherwise). Its bills, agendas and calendars are only as current as its last sync.",
+          "Laws, members, committees and transcripts are not picked up by the sync; they are as current as the last download of that type, and answers about them say when that was, or that it was not recorded.",
           "Law text and transcript text are in the copy only if it was built with them, and are not picked up by the sync. Without them, those tools ask the live API, or, with no API key, say the item is not in the copy.",
           "A member who has never been the prime sponsor of a bill in the copy has no full name in it.",
           "Lists answered from the copy have no total count; only the live API gives one.",
+          "Lists answered from the copy are in BetaNYC's order, not the Senate's, so page 1 from the copy can differ from the live page 1.",
           "A copy last synced by a version before 2.7.0 can be missing changes made in the hours after each of its syncs, and during its first download. Running the sync once from the date the copy was built picks them up (see What's changed)."
         ]
       },

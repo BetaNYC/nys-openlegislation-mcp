@@ -97,6 +97,16 @@ test("the error names the parameters the tool does accept", async () => {
   }
 });
 
+test("the unknown-parameter message is passed on once, not wrapped in '<tool> failed:'", async () => {
+  installFetchMock();
+  const res = await callTool(API_KEY, "search_bills", { term: "x", bogus_unknown_param: "x" });
+  const text = res.content[0].text;
+  assert.equal(res.isError, true);
+  assert.match(text, /^Error: search_bills does not accept 'bogus_unknown_param'\. /);
+  assert.doesNotMatch(text, /failed:/);
+  assert.equal(text.split("search_bills does not accept").length - 1, 1, text);
+});
+
 test("a tool that takes no parameters still refuses unknown ones", async () => {
   const res = await callTool(API_KEY, "list_laws", { bogus_unknown_param: "x" });
   assert.equal(res.isError, true);

@@ -3,8 +3,9 @@
  *
  * NYS Open Legislation pagination facts (verified live 2026-07-06):
  *  - `offset` is 1-BASED (docs call it offsetStart). offset=0 and offset=1
- *    both start at the first row, so advancing by `limit` from 0 re-fetches
- *    the boundary row on every page.
+ *    both start at the first row, so advancing by `limit` from 0 (0, 1000,
+ *    2000, …) fetched rows 1–1000, 1000–1999, 2000–2999, …: row 1000 came
+ *    twice, between the first and second pages, and nothing was skipped.
  *  - The envelope's top-level `total` is the total match count;
  *    `result.size` is just the current page size.
  */

@@ -12,7 +12,7 @@
 import { z } from "zod";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { createRequire } from "node:module";
-import { BETANYC_INSTRUCTIONS, createBetanycTools } from "./betanyc-tools.js";
+import { BETANYC_INSTRUCTIONS, annotateTools, createBetanycTools } from "./betanyc-tools.js";
 import { getSyncState, hasLocalCorpus } from "./db.js";
 import { syncedAtWithZone } from "./syncTime.js";
 
@@ -73,18 +73,24 @@ export const betanyc = betanycTools({
 export const SERVER_INSTRUCTIONS =
   "New York State legislation, laws, members, committees, calendars, agendas and transcripts, " +
   "from the New York State Senate's Open Legislation API, by BetaNYC. " +
+  // Said once here rather than in each tool's description (#42).
+  "A session year is the odd year a two-year session starts: the 2025 session covers 2025 and 2026. " +
+  "Search terms use ElasticSearch syntax: AND, OR, NOT, \"phrase quotes\", wildcards (environ*) and " +
+  "fields (title:\"climate\" AND sponsor:Krueger). " +
+  "Lists take limit (each tool gives its default and maximum) and offset, the number of results to skip; " +
+  "each list answer says which results it shows and the offset for the next page. " +
+  "Every data answer ends with its source, a link and how current it is. " +
   BETANYC_INSTRUCTIONS;
 
-export const TOOLS: Tool[] = [
+/** The Open Legislation tools. Each can call the live API (when the local copy has no answer,
+ * or always, for the live-only tools), so each is open-world. */
+const DOMAIN_TOOLS: Tool[] = [
   // ── Bills ─────────────────────────────────────────────────────────────────
   {
     name: "search_bills",
     description:
       "Search NYS legislation by keyword using ElasticSearch syntax. " +
-      "Searches bill titles, summaries, and full text. Supports boolean operators " +
-      "(AND, OR, NOT), phrase quotes, wildcards, and field targeting " +
-      "(e.g. title:\"climate\" AND sponsor:Krueger). " +
-      "Optionally filter by session year (odd-numbered years: 2023, 2025, etc.).",
+      "Searches bill titles, summaries, and full text. Optionally filter by session year.",
     inputSchema: {
       additionalProperties: false,
       type: "object",
@@ -92,10 +98,10 @@ export const TOOLS: Tool[] = [
         term: { type: "string", description: "Search term or ElasticSearch query string" },
         session_year: {
           type: "number",
-          description: "Legislative session year (odd-numbered, e.g. 2025). Omit to search all sessions (all sessions in the local corpus, when it answers).",
+          description: "Session year (odd year, e.g. 2025). Omit to search all sessions (all sessions in the local corpus, when it answers).",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["term"],
     },
@@ -116,7 +122,7 @@ export const TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
       },
       required: ["print_no"],
@@ -132,10 +138,10 @@ export const TOOLS: Tool[] = [
       properties: {
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 25, max 500)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
     },
   },
@@ -155,7 +161,7 @@ export const TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
       },
       required: ["print_no"],
@@ -179,7 +185,7 @@ export const TOOLS: Tool[] = [
           description: "End datetime, ISO-8601 format: 'YYYY-MM-DDTHH:MM:SS'",
         },
         limit: { type: "number", description: "Max results (default 50, max 500)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["from", "to"],
     },
@@ -256,10 +262,10 @@ export const TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
-        limit: { type: "number", description: "Max results (default 100)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        limit: { type: "number", description: "Max results (default 100, max 200)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["chamber"],
     },
@@ -285,7 +291,7 @@ export const TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
       },
       required: ["member_id", "chamber"],
@@ -312,10 +318,10 @@ export const TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
-        limit: { type: "number", description: "Max results (default 25)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        limit: { type: "number", description: "Max results (default 25, max 100)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["term"],
     },
@@ -337,10 +343,10 @@ export const TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
-        limit: { type: "number", description: "Max results (default 100)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        limit: { type: "number", description: "Max results (default 100, max 200)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["chamber"],
     },
@@ -364,7 +370,7 @@ export const TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
       },
       required: ["committee_name", "chamber"],
@@ -390,10 +396,10 @@ export const TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year (odd-numbered, e.g. 2025). Defaults to current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
-        limit: { type: "number", description: "Max results (default 25)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        limit: { type: "number", description: "Max results (default 25, max 100)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["committee_name", "chamber"],
     },
@@ -413,8 +419,8 @@ export const TOOLS: Tool[] = [
           type: "number",
           description: "Calendar year (e.g. 2025). Defaults to current year.",
         },
-        limit: { type: "number", description: "Max results (default 50)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        limit: { type: "number", description: "Max results (default 50, max 200)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
     },
   },
@@ -454,8 +460,8 @@ export const TOOLS: Tool[] = [
           type: "number",
           description: "Calendar year (e.g. 2025). Defaults to current year.",
         },
-        limit: { type: "number", description: "Max results (default 50)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        limit: { type: "number", description: "Max results (default 50, max 200)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
     },
   },
@@ -494,8 +500,8 @@ export const TOOLS: Tool[] = [
           type: "number",
           description: "Year of the transcripts (e.g. 2025). Defaults to current year.",
         },
-        limit: { type: "number", description: "Max results (default 50)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        limit: { type: "number", description: "Max results (default 50, max 200)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
     },
   },
@@ -528,8 +534,8 @@ export const TOOLS: Tool[] = [
           type: "number",
           description: "Year of the transcripts (e.g. 2025). Defaults to current year.",
         },
-        limit: { type: "number", description: "Max results (default 50)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        limit: { type: "number", description: "Max results (default 50, max 200)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
     },
   },
@@ -583,8 +589,8 @@ export const TOOLS: Tool[] = [
           enum: ["bills", "agendas", "calendars", "laws"],
           description: "Restrict results to one content type (optional)",
         },
-        limit: { type: "number", description: "Max results (default 50)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        limit: { type: "number", description: "Max results (default 50, max 500)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["from", "to"],
     },
@@ -598,7 +604,6 @@ export const TOOLS: Tool[] = [
       "The upstream API has no unified search endpoint — each content type is searched separately, " +
       "so this tool searches a single type per call (defaults to bills). " +
       "Supported types: bills, laws, agendas, calendars, transcripts, hearings. " +
-      "Supports boolean operators (AND, OR, NOT), phrase quotes, wildcards, and field targeting. " +
       "To search resolutions, use type 'bills' (they share the bills index). " +
       "Results of type laws carry nysenate_url (SECTION and ARTICLE only, otherwise null).",
     inputSchema: {
@@ -618,17 +623,27 @@ export const TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Filter bills to a specific session year (optional)",
+          description: "Filter bills to a specific session year (odd year, e.g. 2025; optional)",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
-        offset: { type: "number", description: "Pagination offset (default 0)" },
+        offset: { type: "number", description: "Results to skip (default 0)" },
       },
       required: ["term"],
     },
   },
-  // What changed in this server, who built it, and where its data comes from (BetaNYC standard tools).
-  ...betanyc.tools,
 ];
+
+/** Every tool, annotated (shared module 1.5.2): all only read (readOnlyHint), the Open Legislation
+ * tools may call the live API (openWorldHint true), and the three shared tools, which answer from
+ * this repo's own files, carry their own annotations. annotateTools throws at startup on a gap. */
+export const TOOLS: Tool[] = annotateTools(
+  [
+    ...DOMAIN_TOOLS,
+    // What changed in this server, who built it, and where its data comes from (BetaNYC standard tools).
+    ...betanyc.tools,
+  ],
+  Object.fromEntries(DOMAIN_TOOLS.map((t) => [t.name, true])),
+);
 
 /**
  * Parse tool arguments against a strict schema.
@@ -638,6 +653,12 @@ export const TOOLS: Tool[] = [
  * guess again. (House style borrowed from nyc-checkbook-mcp's
  * `VENDOR_NAME_UNSUPPORTED_MESSAGE`: name the limitation, then the alternatives.)
  */
+/** An unknown parameter: the message names the tool, the parameter and what the tool accepts,
+ * and handlers.ts passes it on as is. */
+export class ParseArgsError extends Error {
+  override name = "ParseArgsError";
+}
+
 export function parseArgs<T extends z.ZodRawShape>(
   toolName: string,
   shape: T,
@@ -650,7 +671,7 @@ export function parseArgs<T extends z.ZodRawShape>(
   );
   if (unknownKeys.length === 0) throw parsed.error;
   const accepted = Object.keys(shape);
-  throw new Error(
+  throw new ParseArgsError(
     `${toolName} does not accept ${unknownKeys.map((k) => `'${k}'`).join(", ")}. ` +
       "Unrecognized parameters are rejected rather than ignored, because silently " +
       "dropping a filter returns real data that answers a different question. " +

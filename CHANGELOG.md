@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Adds `about_data`, the third tool BetaNYC is adding to each of its MCP servers, and moves to
 shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betanyc-ai-workspace#1655 and #1672 (epic #1652).
 
+### Breaking
+
+- **The text at the end of every data answer changed** (shared module 1.5.1 and 1.5.2).
+  It was `Source: Open Legislation API (New York State Senate). As of <ISO time in UTC>
+  (fetched from the source for this answer). Link: https://legislation.nysenate.gov/`.
+  It is now `BetaNYC modified this data: <what BetaNYC did>. This copy should not be
+  considered the official record. Fetched from the source for this answer at
+  2026-11-18 13:05 EST (New York time). Official record: Open Legislation API (New York
+  State Senate), https://legislation.nysenate.gov/`: New York time, to the minute, with
+  no ISO time and no `Source:` or `Link:` label. An answer from the local copy has the
+  same frame, with `As of <date> (the date of the copy this server answers from).` or
+  `As of: unknown …`. Anything that reads the time, or looks for `Source:` or `Link:`,
+  out of the text will break.
+- **Local `search_bills` results no longer have a `rank` field.** The Senate's own search
+  results carry `rank`; the local copy's SQLite full-text score was put under the same
+  name. It is now `betanyc.search_score` (lower is a closer match), and the answer says
+  the order is BetaNYC's local search, not the Senate's.
+- **Local `search_members` no longer replaces the Senate's `fullName` or `chamber`.** It
+  fills them only when the Senate's member record lacks them, and lists what it filled in
+  `betanyc.filled`.
+
 ### Added
 
 - `about_data`: where this server's data comes from, answered from the new
@@ -41,15 +62,113 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
 ### Changed
 
 - 27 tools instead of 26.
-- Shared module 1.4.0: `src/betanyc-tools.ts`, `scripts/whats_changed.py` and the
-  about-data validator kit (`scripts/tests/catalog_validate.py`,
-  `scripts/mcp_shared/data-sources.schema.json`) are BetaNYC's shared module 1.4.0,
-  all copied in unchanged (`whats_changed_drift.py compare`: CURRENT). Never
-  edit the copies.
+- Shared module 1.5.2: `src/betanyc-tools.ts` is BetaNYC's shared module 1.5.2, and
+  `scripts/whats_changed.py` and the about-data validator kit
+  (`scripts/tests/catalog_validate.py`, `scripts/mcp_shared/data-sources.schema.json`)
+  are those of `whats_changed.py` 1.4.1, all copied in unchanged
+  (`whats_changed_drift.py scan`: CURRENT). Never edit the copies. 1.5.0 adds helpers
+  for a server's own tools and changes none of the three shared tools (#30). 1.5.1
+  (canonical commit `17938f2`; the file's own stamp, the sha256 of the file without its
+  stamp line, is `e1e15642…`) tightens them: `assertEveryToolAnnotated` requires
+  `readOnlyHint: true`, a boolean `openWorldHint` and a title; `annotateTools(tools,
+  boolean)` lets a tool's own hint win; `provenance()` gives a live answer's fetch time in
+  New York time to the minute and labels a live `asOf` as the data's own date (new fields
+  `as_of_kind: "source"` and `retrieved_at`), and refuses links with a username or
+  password and names with control characters; `toolError` redacts more encoded forms of
+  a secret and ignores secrets under 8 characters. 1.5.2 (canonical commit `bbc1671`;
+  raw file sha256 `bcc117e7…`, 125,208 bytes; the file's own stamp, the sha256 without its
+  stamp line, is `eb29cbfb…`): `toolError` drops stack-frame lines from the caller's
+  message too and caps it at 1,000 characters; new `errorSummary(err, max)` gives the
+  first plain line of an unknown error; `provenance()` takes `changedByBetanyc` and then
+  says, in `about_data`'s own words, that BetaNYC modified or produced the data.
+- Every tool now declares `annotations` (`annotateTools`, #31): `readOnlyHint: true`,
+  a `title`, and `openWorldHint` (true for the 24 Open Legislation tools, which may
+  call the live API; false for the three shared tools). `test/tool-list.test.js`
+  fails on a tool without them.
+- `test/tool-list.test.js` also caps the tool list plus the server instructions at
+  28,500 characters (`toolListSize`; measured 28,077 on 2026-11-18, #39; 28,362 after
+  the session-year hint went back on).
+- Requests to the Open Legislation API go through `src/http.ts` (#32), following the
+  API's rate-limit rules (per key from December 1, 2026: 10 requests per second, 4 in
+  progress): one request at a time, at least 100 ms apart; a 30 s timeout and no
+  resend after it; at most two retries, only on 429 and 503, waiting at least
+  `Retry-After` (whole seconds) plus jitter, or 1 s then 2 s without it; a
+  `Retry-After` over 30 s is reported, not waited out. A User-Agent names the
+  package and version. Before, `apiFetch` called `fetch(url)` with none of these.
+- Errors (#38): every failure is `isError: true` with a plain sentence and what to try
+  (by HTTP status, timeout, network failure, `success: false`, bad arguments), built
+  with the shared `toolError`: at most 500 characters of the upstream body, no stack
+  lines. Argument errors name the field instead of dumping zod's JSON.
+- The API key is redacted from every error (#37), raw and URL-encoded. The API takes it
+  only as the `key` query parameter (API Conventions, "Base URL and API key"), so it
+  stays there. `test/upstream.test.js` covers all three.
+- Every data answer names its source and how current it is (#33, #34): after the JSON,
+  a line from the shared `provenance()` (see Breaking for its words). It says what
+  BetaNYC did to the data, in the words `about_data` uses: for a live answer, that it is
+  passed on as the API returns it with additions that change no value (paging totals,
+  links to nysenate.gov, an empty vote list for a bill with none); for the local copy,
+  that it is a copy BetaNYC saved and indexed, whose search and list order are BetaNYC's
+  own. Then the official record, https://legislation.nysenate.gov/, and the fetch time
+  (New York time) for a live call. For a local one it gives the date of that type of data
+  (`src/corpusDates.ts`): `last_synced_at` for bills, agendas and calendars, the only
+  types `scripts/sync.js` refreshes; for laws, members, committees and transcripts, the
+  time `scripts/fetch-data.js` last downloaded that type, which it now records as
+  `sync_state.fetched_at_<type>`. A copy with no such time says the date is not
+  recorded and that the data comes from the last full download, never the sync time
+  ("As of: unknown" when there is no readable date). `test/corpus-dates.test.js` covers
+  each type, and every single-item tool. `about_data`'s "How current on this server" for
+  the local copy says the same per type, not the sync time for everything. A list from the
+  local copy also says its order is the copy's own (for example, bills newest published
+  first), so its page 1 can differ from the Senate's. It replaces the disclaimer's "Data sourced from"
+  sentence; the caveat to verify at legislation.nysenate.gov stays.
+- Lists (#35): every list tool's `limit` now has a maximum, stated in its schema
+  (`search_bills`, `search_members`, `get_committee_meetings`, `search`: 100;
+  `list_members`, `list_committees`, `list_calendars`, `list_agendas`, both transcript
+  lists: 200; `list_bills`, `get_bill_updates`, `get_updates`: 500). A whole-number
+  `limit` above it is lowered to it, and the paging line says "limit lowered to N, the
+  most this tool returns". A `limit` under 1, a negative `offset` and a number that is
+  not whole are refused with a plain message. Defaults are unchanged.
+  Each list answer says which results it shows, of how many (live answers carry the
+  API's `total`), and the `offset` for the next page; the local copy has no total, so a
+  full page says more may be available, and a short one says it is all the local copy
+  has. `test/answers.test.js` checks it on a
+  25,520-bill fixture.
+- The server instructions now say once what several tools used to repeat (#42): session
+  years, ElasticSearch query syntax, `limit`/`offset` paging, and the source line at the
+  end of each answer. The tool descriptions are shorter; the shared about_data paragraph
+  is unchanged. Each `session_year` parameter keeps a short "(odd year, e.g. 2025)",
+  since some AI apps ignore server instructions.
+- An unknown parameter's error is passed on once ("search_bills does not accept 'x'. …"),
+  not wrapped as "search_bills failed: search_bills does not accept …" (`ParseArgsError`). `test/tool-list.test.js` fails if a sentence repeats across tools.
+
+### Added (tests)
+
+- `eval/` (#40): 12 realistic questions with known answers, written before scoring, run
+  offline against fixtures from the API documentation's example responses
+  (`npm run eval`, results in `eval/runs/`; also run by `npm test`).
+- `test/stdout.test.js` (#41): starts the server and fails on any stdout line that is not
+  a JSON-RPC message, and on any direct stdout write in `src/`.
 - The shared tools are dispatched with `callAsync`, because the corpus freshness
   hook reads the local copy asynchronously.
 
 ### Fixed
+
+- **`fetch-data.js` saved a download date even when the download failed.** `fetchLaws`
+  and `fetchTranscripts` carry on past a failed item; the date was saved anyway, so old
+  data claimed the new date. A type's date is now saved only when every item came
+  through; otherwise the run exits non-zero and says how many items failed and what to
+  run again. `test/fetch-data-dates.test.js` covers laws and transcripts with every,
+  some and no request failing.
+- A network error with no error code showed the whole cause message, stack lines
+  included. It now shows only its first plain line (shared `errorSummary`).
+
+- **Live paging repeated one result (since 1.0.0, #36).** The tools' `offset` counts
+  from 0, but the API's counts from 1 (API Conventions, "Paging"), and it was sent
+  unchanged: `offset: 0` and `offset: 1` returned the same first page. Paging by 25 sent
+  offsets 0, 25, 50 as 1, 25, 50, so the pages were results 1–25, 25–49, 50–74: result
+  25 came twice, as the last of page 1 and the first of page 2, and no other result
+  repeated. Nothing was skipped; a count made by paging was one too high. Live calls now
+  send `offset + 1`. Answers from the local copy were not affected.
 
 - **The local copy's sync missed changes after every sync (since 2.0.0).** The
   Open Legislation API reads every date and time as New York local time with no

@@ -69,7 +69,8 @@ test("bills: get, list (newest first), FTS search with and without session", { s
   assert.equal(list.size, 2);
   const all = await db.localSearchBills("climate");
   assert.equal(all.size, 3);
-  assert.ok(all.items.every((i) => typeof i.rank === "number" && i.result.printNo));
+  // BetaNYC's local score is kept apart from the Senate's own `rank` field name.
+  assert.ok(all.items.every((i) => typeof i.betanyc.search_score === "number" && i.result.printNo && !("rank" in i)));
   const scoped = await db.localSearchBills("climate", 2023);
   assert.deepEqual(scoped.items.map((i) => i.result.printNo), ["S3"]);
   assert.equal(await db.localSearchBills("NOT AND ("), null, "a bad FTS query returns null, not a throw");

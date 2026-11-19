@@ -30,6 +30,7 @@ on:
       - "WHATS-CHANGED.md"
       - "CHANGELOG.md"
       - "scripts/**"
+      - "eval/**"
       - "DATA-SOURCES.json"
       - "data.json"
   push:
@@ -43,6 +44,7 @@ on:
       - "WHATS-CHANGED.md"
       - "CHANGELOG.md"
       - "scripts/**"
+      - "eval/**"
       - "DATA-SOURCES.json"
       - "data.json"
 

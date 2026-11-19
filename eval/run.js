@@ -68,7 +68,8 @@ export async function runEval() {
         if (c.text && !new RegExp(c.text, "m").test(text)) fail(`text does not match /${c.text}/`);
         // Invariants.
         if (text.includes(key ?? "\u0000")) fail("the API key appears in the answer");
-        if (!r.isError && !/^Source: .*New York State Senate.*\. As of .+ Link: https:\/\//m.test(text)) fail("data answer has no source line");
+        // A live answer gives its fetch time; a local one, its copy's date (shared module 1.5.1).
+        if (!r.isError && !/^Source: .*New York State Senate.*\. (?:As of .+|Fetched from the source for this answer at .+) Link: https:\/\//m.test(text)) fail("data answer has no source line");
       }
       results.push({ id: q.id, q: q.q, pass: failures.length === 0, failures });
     }

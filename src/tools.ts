@@ -98,7 +98,7 @@ const DOMAIN_TOOLS: Tool[] = [
         term: { type: "string", description: "Search term or ElasticSearch query string" },
         session_year: {
           type: "number",
-          description: "Session year. Omit to search all sessions (all sessions in the local corpus, when it answers).",
+          description: "Session year (odd year, e.g. 2025). Omit to search all sessions (all sessions in the local corpus, when it answers).",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
         offset: { type: "number", description: "Results to skip (default 0)" },
@@ -122,7 +122,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year. Defaults to the current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
       },
       required: ["print_no"],
@@ -138,7 +138,7 @@ const DOMAIN_TOOLS: Tool[] = [
       properties: {
         session_year: {
           type: "number",
-          description: "Session year. Defaults to the current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 25, max 500)" },
         offset: { type: "number", description: "Results to skip (default 0)" },
@@ -161,7 +161,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year. Defaults to the current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
       },
       required: ["print_no"],
@@ -262,7 +262,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year. Defaults to the current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 100, max 200)" },
         offset: { type: "number", description: "Results to skip (default 0)" },
@@ -291,7 +291,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year. Defaults to the current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
       },
       required: ["member_id", "chamber"],
@@ -318,7 +318,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year. Defaults to the current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
         offset: { type: "number", description: "Results to skip (default 0)" },
@@ -343,7 +343,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year. Defaults to the current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 100, max 200)" },
         offset: { type: "number", description: "Results to skip (default 0)" },
@@ -370,7 +370,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year. Defaults to the current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
       },
       required: ["committee_name", "chamber"],
@@ -396,7 +396,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Session year. Defaults to the current session.",
+          description: "Session year (odd year, e.g. 2025). Defaults to the current session.",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
         offset: { type: "number", description: "Results to skip (default 0)" },
@@ -623,7 +623,7 @@ const DOMAIN_TOOLS: Tool[] = [
         },
         session_year: {
           type: "number",
-          description: "Filter bills to a specific session year (optional)",
+          description: "Filter bills to a specific session year (odd year, e.g. 2025; optional)",
         },
         limit: { type: "number", description: "Max results (default 25, max 100)" },
         offset: { type: "number", description: "Results to skip (default 0)" },
@@ -633,7 +633,7 @@ const DOMAIN_TOOLS: Tool[] = [
   },
 ];
 
-/** Every tool, annotated (shared module 1.5.0): all only read (readOnlyHint), the Open Legislation
+/** Every tool, annotated (shared module 1.5.1): all only read (readOnlyHint), the Open Legislation
  * tools may call the live API (openWorldHint true), and the three shared tools, which answer from
  * this repo's own files, carry their own annotations. annotateTools throws at startup on a gap. */
 export const TOOLS: Tool[] = annotateTools(
@@ -653,6 +653,12 @@ export const TOOLS: Tool[] = annotateTools(
  * guess again. (House style borrowed from nyc-checkbook-mcp's
  * `VENDOR_NAME_UNSUPPORTED_MESSAGE`: name the limitation, then the alternatives.)
  */
+/** An unknown parameter: the message names the tool, the parameter and what the tool accepts,
+ * and handlers.ts passes it on as is. */
+export class ParseArgsError extends Error {
+  override name = "ParseArgsError";
+}
+
 export function parseArgs<T extends z.ZodRawShape>(
   toolName: string,
   shape: T,
@@ -665,7 +671,7 @@ export function parseArgs<T extends z.ZodRawShape>(
   );
   if (unknownKeys.length === 0) throw parsed.error;
   const accepted = Object.keys(shape);
-  throw new Error(
+  throw new ParseArgsError(
     `${toolName} does not accept ${unknownKeys.map((k) => `'${k}'`).join(", ")}. ` +
       "Unrecognized parameters are rejected rather than ignored, because silently " +
       "dropping a filter returns real data that answers a different question. " +

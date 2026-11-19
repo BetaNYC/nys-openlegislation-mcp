@@ -41,18 +41,28 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
 ### Changed
 
 - 27 tools instead of 26.
-- Shared module 1.5.0: `src/betanyc-tools.ts` is BetaNYC's shared module 1.5.0, and
+- Shared module 1.5.1: `src/betanyc-tools.ts` is BetaNYC's shared module 1.5.1, and
   `scripts/whats_changed.py` and the about-data validator kit
   (`scripts/tests/catalog_validate.py`, `scripts/mcp_shared/data-sources.schema.json`)
   are those of `whats_changed.py` 1.4.1, all copied in unchanged
   (`whats_changed_drift.py scan`: CURRENT). Never edit the copies. 1.5.0 adds helpers
-  for a server's own tools and changes none of the three shared tools (#30).
+  for a server's own tools and changes none of the three shared tools (#30). 1.5.1
+  (canonical commit `17938f2`; the file's own stamp, the sha256 of the file without its
+  stamp line, is `e1e15642…`) tightens them: `assertEveryToolAnnotated` requires
+  `readOnlyHint: true`, a boolean `openWorldHint` and a title; `annotateTools(tools,
+  boolean)` lets a tool's own hint win; `provenance()` gives a live answer's fetch time in
+  New York time to the minute and labels a live `asOf` as the data's own date (new fields
+  `as_of_kind: "source"` and `retrieved_at`), and refuses links with a username or
+  password and names with control characters; `toolError` passes the caller's message on
+  unfiltered, redacts more encoded forms of a secret, and ignores secrets under 8
+  characters.
 - Every tool now declares `annotations` (`annotateTools`, #31): `readOnlyHint: true`,
   a `title`, and `openWorldHint` (true for the 24 Open Legislation tools, which may
   call the live API; false for the three shared tools). `test/tool-list.test.js`
   fails on a tool without them.
 - `test/tool-list.test.js` also caps the tool list plus the server instructions at
-  28,500 characters (`toolListSize`; measured 28,077 on 2026-11-18, #39).
+  28,500 characters (`toolListSize`; measured 28,077 on 2026-11-18, #39; 28,362 after
+  the session-year hint went back on).
 - Requests to the Open Legislation API go through `src/http.ts` (#32), following the
   API's rate-limit rules (per key from December 1, 2026: 10 requests per second, 4 in
   progress): one request at a time, at least 100 ms apart; a 30 s timeout and no
@@ -69,23 +79,35 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
   stays there. `test/upstream.test.js` covers all three.
 - Every data answer names its source and how current it is (#33, #34): after the JSON,
   a line from the shared `provenance()`, "Source: Open Legislation API (New York State
-  Senate). As of … Link: https://legislation.nysenate.gov/", with the retrieval time for
-  a live call and the corpus's `last_synced_at` for a local one ("As of: unknown" when
-  the copy has no readable sync time). It replaces the disclaimer's "Data sourced from"
+  Senate). … Link: https://legislation.nysenate.gov/", with the fetch time (New York time)
+  for a live call. For a local one it gives the date of that type of data
+  (`src/corpusDates.ts`): `last_synced_at` for bills, agendas and calendars, the only
+  types `scripts/sync.js` refreshes; for laws, members, committees and transcripts, the
+  time `scripts/fetch-data.js` last downloaded that type, which it now records as
+  `sync_state.fetched_at_<type>`. A copy with no such time says the date is not
+  recorded and that the data comes from the last full download, never the sync time
+  ("As of: unknown" when there is no readable date). `test/corpus-dates.test.js` covers
+  each type. It replaces the disclaimer's "Data sourced from"
   sentence; the caveat to verify at legislation.nysenate.gov stays.
-- Lists (#35): every list tool's `limit` now has a hard maximum, refused above it
+- Lists (#35): every list tool's `limit` now has a maximum, stated in its schema
   (`search_bills`, `search_members`, `get_committee_meetings`, `search`: 100;
   `list_members`, `list_committees`, `list_calendars`, `list_agendas`, both transcript
-  lists: 200; `list_bills`, `get_bill_updates`, `get_updates`: 500), and must be a whole
-  number of at least 1; `offset` a whole number of at least 0. Defaults are unchanged.
+  lists: 200; `list_bills`, `get_bill_updates`, `get_updates`: 500). A whole-number
+  `limit` above it is lowered to it, and the paging line says "limit lowered to N, the
+  most this tool returns". A `limit` under 1, a negative `offset` and a number that is
+  not whole are refused with a plain message. Defaults are unchanged.
   Each list answer says which results it shows, of how many (live answers carry the
   API's `total`), and the `offset` for the next page; the local copy has no total, so a
-  full page says more may be available. `test/answers.test.js` checks it on a
+  full page says more may be available, and a short one says it is all the local copy
+  has. `test/answers.test.js` checks it on a
   25,520-bill fixture.
 - The server instructions now say once what several tools used to repeat (#42): session
   years, ElasticSearch query syntax, `limit`/`offset` paging, and the source line at the
   end of each answer. The tool descriptions are shorter; the shared about_data paragraph
-  is unchanged. `test/tool-list.test.js` fails if a sentence repeats across tools.
+  is unchanged. Each `session_year` parameter keeps a short "(odd year, e.g. 2025)",
+  since some AI apps ignore server instructions.
+- An unknown parameter's error is passed on once ("search_bills does not accept 'x'. …"),
+  not wrapped as "search_bills failed: search_bills does not accept …" (`ParseArgsError`). `test/tool-list.test.js` fails if a sentence repeats across tools.
 
 ### Added (tests)
 
@@ -99,11 +121,13 @@ shared module 1.4.0. Fixes the local copy's sync times. Tracking: BetaNYC/betany
 
 ### Fixed
 
-- **Live paging repeated one result per page (since 1.0.0, #36).** The tools'
-  `offset` counts from 0, but the API's counts from 1 (API Conventions, "Paging"), and
-  it was sent unchanged: `offset: 0` and `offset: 1` returned the same first page, and
-  paging by `limit` returned the last result of each page again first on the next. Live
-  calls now send `offset + 1`. Answers from the local copy were not affected.
+- **Live paging repeated one result (since 1.0.0, #36).** The tools' `offset` counts
+  from 0, but the API's counts from 1 (API Conventions, "Paging"), and it was sent
+  unchanged: `offset: 0` and `offset: 1` returned the same first page. Paging by 25 sent
+  offsets 0, 25, 50 as 1, 25, 50, so the pages were results 1–25, 25–49, 50–74: result
+  25 came twice, as the last of page 1 and the first of page 2, and no other result
+  repeated. Nothing was skipped; a count made by paging was one too high. Live calls now
+  send `offset + 1`. Answers from the local copy were not affected.
 
 - **The local copy's sync missed changes after every sync (since 2.0.0).** The
   Open Legislation API reads every date and time as New York local time with no

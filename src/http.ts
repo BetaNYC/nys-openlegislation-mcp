@@ -45,7 +45,7 @@ export class UpstreamError extends Error {
   }
 }
 
-// ponytail: one global queue, since the API's limits are per key and the server has one key.
+// One queue for the whole process: the API's limits are per key, and the server uses one key.
 let queue: Promise<unknown> = Promise.resolve();
 let lastStart = 0;
 

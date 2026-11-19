@@ -14,8 +14,7 @@
  * and issue #13.
  */
 
-import { getSyncState } from "./db.js";
-import { syncedAtWithZone } from "./syncTime.js";
+import { corpusDateFor, type CorpusDate } from "./corpusDates.js";
 
 /** True when a local result is empty (no rows) and should fall through to live. */
 export function isEmptyLocalResult(result: unknown): boolean {
@@ -28,28 +27,20 @@ export function isEmptyLocalResult(result: unknown): boolean {
   return false;
 }
 
-/** Last corpus sync timestamp, or "unknown date". Provenance is best-effort. */
-async function syncedAt(): Promise<string> {
-  try {
-    const state = await getSyncState();
-    // With its zone (2.7.0): a New York offset, or Z for a corpus synced by an older version.
-    const shown = syncedAtWithZone(state?.last_synced_at);
-    if (shown) return shown;
-  } catch {
-    // never fail a request over provenance
-  }
-  return "unknown date";
+/** What a keyless caller has to do to get fresher data than the corpus holds. */
+export const KEYLESS_FRESHNESS_NOTE = keylessFreshnessNote("re-run the sync (`npm run sync`)");
+
+/** The keyless note for a type, naming what refreshes it (the sync does not refresh laws,
+ * members, committees or transcripts; see corpusDates.ts). */
+export function keylessFreshnessNote(refresh: string): string {
+  return "No NYS_LEGISLATION_API_KEY is set, so this is snapshot data and may be out " +
+    "of date. For current results, set NYS_LEGISLATION_API_KEY (free: " +
+    `https://legislation.nysenate.gov/register) and ${refresh}.`;
 }
 
-/** What a keyless caller has to do to get fresher data than the corpus holds. */
-export const KEYLESS_FRESHNESS_NOTE =
-  "No NYS_LEGISLATION_API_KEY is set, so this is snapshot data and may be out " +
-  "of date. For current results, set NYS_LEGISLATION_API_KEY (free: " +
-  "https://legislation.nysenate.gov/register) and re-run the sync " +
-  "(`npm run sync`).";
-
 /**
- * Attach a visible provenance note to a locally-served payload.
+ * Attach a visible provenance note to a locally-served payload: the date of that type of data
+ * (the sync time only for the types the sync refreshes; corpusDates.ts). Without a date, a bill's.
  *
  * When `keyless`, also carry the remedy: a consuming model needs to be able to
  * tell the user *why* the data may be stale and *what to do*, not merely that a
@@ -57,11 +48,13 @@ export const KEYLESS_FRESHNESS_NOTE =
  */
 export async function annotateLocalResult<T extends object>(
   result: T,
-  keyless = false
+  keyless = false,
+  date?: CorpusDate
 ): Promise<T & { source: string; freshness?: string }> {
-  const source = `local corpus (synced ${await syncedAt()})`;
+  const d = date ?? (await corpusDateFor("bills"));
+  const source = `local corpus (${d.words})`;
   return keyless
-    ? { ...result, source, freshness: KEYLESS_FRESHNESS_NOTE }
+    ? { ...result, source, freshness: keylessFreshnessNote(d.refresh) }
     : { ...result, source };
 }
 
@@ -72,20 +65,20 @@ export async function annotateLocalResult<T extends object>(
  * corpus" and "does not exist" are indistinguishable, and returning the former
  * shaped like the latter asserts something this server cannot know.
  */
-export async function notInLocalCorpus(): Promise<{
+export async function notInLocalCorpus(date?: CorpusDate): Promise<{
   result: string;
   source: string;
   message: string;
 }> {
-  const synced = await syncedAt();
+  const d = date ?? (await corpusDateFor("bills"));
   return {
     result: "not_found_in_local_corpus",
-    source: `local corpus (synced ${synced})`,
+    source: `local corpus (${d.words})`,
     message:
-      `Not found in the local corpus (synced ${synced}). This may mean it does ` +
+      `Not found in the local corpus (${d.words}). This may mean it does ` +
       "not exist, or that the corpus has not synced that slice — the two are " +
       "indistinguishable offline. Confirming requires a live lookup: set " +
       "NYS_LEGISLATION_API_KEY (free: https://legislation.nysenate.gov/register) " +
-      "and retry, or re-run `npm run sync` to refresh the corpus.",
+      `and retry, or ${d.refresh} to refresh the corpus.`,
   };
 }

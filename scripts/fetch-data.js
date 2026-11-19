@@ -21,7 +21,7 @@ import { mkdirSync, existsSync } from "fs";
 import { START_OFFSET, nextOffset, isLastPage, basePrintNo } from "./lib/api-helpers.js";
 import { flattenLawTree } from "./lib/law-tree.js";
 import { backfillMemberFullNames, ensureMemberFullNameColumn } from "./lib/members.js";
-import { initialWatermark, rangeEnd } from "./lib/ny-time.js";
+import { initialWatermark, nyStamp, rangeEnd } from "./lib/ny-time.js";
 
 let Database;
 try {
@@ -199,7 +199,7 @@ async function apiFetch(path, params = {}) {
 
 async function fetchAllPages(path, params = {}, label = path) {
   const items = [];
-  let offset = START_OFFSET; // API offsets are 1-based (offsetStart) — advancing by limit from 0 duplicated a row per page
+  let offset = START_OFFSET; // API offsets are 1-based (offsetStart): starting from 0 fetched the first page's last row again
   const limit = 1000;
   while (true) {
     const { result, total } = await apiFetch(path, { ...params, limit, offset });
@@ -604,13 +604,24 @@ const startTime = Date.now();
 // Noted before loading anything: New York now minus 2 minutes (keeping_up.html).
 const LOAD_START = rangeEnd(new Date(startTime));
 
-if (TYPES.has("bills"))       await fetchBills();
-if (TYPES.has("laws"))        await fetchLaws();
-if (TYPES.has("members"))     await fetchMembers();
-if (TYPES.has("committees"))  await fetchCommittees();
-if (TYPES.has("agendas"))     await fetchAgendas();
-if (TYPES.has("calendars"))   await fetchCalendars();
-if (TYPES.has("transcripts")) await fetchTranscripts();
+// When each type was downloaded: the time noted before its download, saved with its New York
+// offset as sync_state.fetched_at_<type> once the download is done. The nightly sync refreshes
+// only bills, agendas and calendars, so answers about laws, members, committees and transcripts
+// give this date, not the sync time (src/corpusDates.ts).
+async function fetchType(type, fetchAll) {
+  if (!TYPES.has(type)) return;
+  const started = nyStamp(new Date());
+  await fetchAll();
+  setSyncState.run(`fetched_at_${type}`, started);
+}
+
+await fetchType("bills", fetchBills);
+await fetchType("laws", fetchLaws);
+await fetchType("members", fetchMembers);
+await fetchType("committees", fetchCommittees);
+await fetchType("agendas", fetchAgendas);
+await fetchType("calendars", fetchCalendars);
+await fetchType("transcripts", fetchTranscripts);
 
 // Member full names come from bill sponsor blocks already in the corpus, so
 // this runs after bills and members are both in place. No network calls.

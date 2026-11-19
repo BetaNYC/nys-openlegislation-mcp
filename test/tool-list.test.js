@@ -23,6 +23,8 @@ test("every tool is annotated: read-only, with openWorldHint and a title", () =>
 // Raise the budget only on purpose, with a dated line here saying why.
 // 2026-11-18: measured 28,077 characters (27 tools, annotations added); budget set just above.
 // 2026-11-18: 28,121 after the shared conventions moved into the instructions (#42); budget unchanged.
+// 2026-11-18: 28,362 after the session-year hint went back on its 11 parameters (review of #46; some
+// AI apps ignore server instructions) and shared module 1.5.1; budget unchanged.
 const BUDGET_CHARS = 28_500;
 
 test("tool definitions plus server instructions stay within the size budget", () => {
@@ -49,4 +51,11 @@ test("shared guidance lives once in the server instructions, not in each tool", 
       seen.set(s, t.name);
     }
   }
+});
+
+// Some AI apps ignore server instructions, so each session_year parameter carries the hint too.
+test("every session_year parameter says it is an odd year, e.g. 2025", () => {
+  const params = TOOLS.flatMap((t) => (t.inputSchema.properties?.session_year ? [[t.name, t.inputSchema.properties.session_year]] : []));
+  assert.ok(params.length >= 10, `found ${params.length}`);
+  for (const [name, p] of params) assert.match(p.description, /\(odd year, e\.g\. 2025[;)]/, name);
 });

@@ -16,7 +16,8 @@ import {
 } from "./api.js";
 import { UpstreamError, timing } from "./http.js";
 import { provenance, toolError } from "./betanyc-tools.js";
-import { parseArgs, betanyc, corpusSyncedAt } from "./tools.js";
+import { parseArgs, ParseArgsError, betanyc } from "./tools.js";
+import { corpusDateFor, type CorpusDate, type CorpusType } from "./corpusDates.js";
 import {
   getBill,
   searchBills,
@@ -67,7 +68,22 @@ import {
   localGetHearingTranscript,
 } from "./db.js";
 
-type Page = { limit: number; offset: number };
+/** A list's page. `lowered`: the caller asked for more than the tool's maximum, so `limit` is
+ * the maximum. */
+type Page = { limit: number; offset: number; lowered?: boolean };
+
+/** A list's `limit` and `offset` (#35). A whole-number `limit` above the tool's maximum is
+ * lowered to the maximum (pageOf), and the paging line says so. A `limit` under 1, a negative
+ * `offset` and a number that is not whole are refused with a plain message. */
+const LIMIT_RULE = "must be a whole number, 1 or more (such as 25)";
+const OFFSET_RULE = "must be a whole number, 0 or more (0 starts at the first result)";
+const LIMIT = z.number({ invalid_type_error: LIMIT_RULE }).int(LIMIT_RULE).min(1, LIMIT_RULE).optional();
+const OFFSET = z.number({ invalid_type_error: OFFSET_RULE }).int(OFFSET_RULE).min(0, OFFSET_RULE).optional();
+
+export function pageOf(limit: number | undefined, offset: number | undefined, dflt: number, max: number): Page {
+  const asked = limit ?? dflt;
+  return asked > max ? { limit: max, offset: offset ?? 0, lowered: true } : { limit: asked, offset: offset ?? 0 };
+}
 
 /** Where a person can check any record from this server (DATA-SOURCES.json verify_at). */
 export const VERIFY_AT = "https://legislation.nysenate.gov/";
@@ -75,21 +91,22 @@ export const VERIFY_AT = "https://legislation.nysenate.gov/";
 /**
  * Which results a list answer shows, and how to get the rest (#35). `offset` counts from 0.
  * Live answers carry the API's `total`; the local copy has none, so a full page says more may
- * be available.
+ * be available, and a short one says it is all the local copy has (not all there are).
  */
-export function pagingLine(payload: unknown, page: Page): string | null {
+export function pagingLine(payload: unknown, page: Page, local = false): string | null {
   const items = (payload as { items?: unknown })?.items;
   if (!Array.isArray(items)) return null;
   const n = items.length;
   const total = (payload as { total?: unknown }).total;
   const first = page.offset + 1;
   const last = page.offset + n;
+  const lowered = page.lowered ? ` (limit lowered to ${page.limit}, the most this tool returns)` : "";
   if (n === 0) {
     return typeof total === "number" && total > 0
-      ? `No results at offset ${page.offset}: there are ${total} in all. Use an offset below ${total}.`
-      : "No results.";
+      ? `No results at offset ${page.offset}${lowered}: there are ${total} in all. Use an offset below ${total}.`
+      : `No results${lowered}.`;
   }
-  const shown = `Showing results ${first}–${last}`;
+  const shown = `Showing results ${first}–${last}${lowered}`;
   if (typeof total === "number") {
     return last < total
       ? `${shown} of ${total}. For the next ${Math.min(page.limit, total - last)}, call again with offset ${last}.`
@@ -97,23 +114,25 @@ export function pagingLine(payload: unknown, page: Page): string | null {
   }
   return n >= page.limit
     ? `${shown}. More may be available: call again with offset ${last}.`
-    : `${shown}: all there are.`;
+    : `${shown}: all ${local ? "the local copy has" : "there are"}.`;
 }
 
 /**
  * One data answer (#33, #34): the payload as JSON, then which results it shows (lists), the
- * source with its link and how current it is (shared provenance(): retrieval time for a live
- * call, the copy's sync time for the local corpus), and the caveat.
+ * source with its link and how current it is (shared provenance(): the fetch time for a live
+ * call; for the local corpus, the date of that type of data, corpusDates.ts: the sync time only
+ * for the types the sync refreshes), and the caveat.
  */
-export async function answer(payload: unknown, from: "live" | "corpus", page?: Page): Promise<CallToolResult> {
+export async function answer(payload: unknown, from: "live" | CorpusDate, page?: Page): Promise<CallToolResult> {
+  const local = from !== "live";
   const p = provenance({
     sourceName: "Open Legislation API",
     publisher: "New York State Senate",
     sourceUrl: VERIFY_AT,
-    kind: from === "live" ? "live" : "snapshot",
-    ...(from === "corpus" ? { asOf: await corpusSyncedAt().catch(() => null) } : {}),
+    kind: local ? "snapshot" : "live",
+    ...(local ? { asOf: from.asOf } : {}),
   });
-  const lines = [page ? pagingLine(payload, page) : null, p.text, CAVEAT].filter(Boolean);
+  const lines = [page ? pagingLine(payload, page, local) : null, p.text, local ? from.note : null, CAVEAT].filter(Boolean);
   return { content: [{ type: "text", text: `${JSON.stringify(payload, null, 2)}\n\n---\n${lines.join("\n")}` }] };
 }
 
@@ -141,13 +160,15 @@ export async function callTool(
    * live data to fall through to, so they get an explicit not-found-in-corpus
    * response instead of a bare empty payload (issue #13).
    */
-  async function localResponse(local: unknown, page?: Page): Promise<CallToolResult | null> {
+  async function localResponse(local: unknown, type: CorpusType, page?: Page): Promise<CallToolResult | null> {
     if (local == null || isEmptyLocalResult(local)) {
       if (apiKey) return null;
-      return answer(await notInLocalCorpus(), "corpus");
+      const date = await corpusDateFor(type);
+      return answer(await notInLocalCorpus(date), date);
     }
-    const annotated = await annotateLocalResult(local as object, !apiKey);
-    return answer(annotated, "corpus", page);
+    const date = await corpusDateFor(type);
+    const annotated = await annotateLocalResult(local as object, !apiKey, date);
+    return answer(annotated, date, page);
   }
 
   try {
@@ -157,12 +178,12 @@ export async function callTool(
         const { term, session_year, limit, offset } = parseArgs(name, {
           term: z.string(),
           session_year: z.number().optional(),
-          limit: z.number().int().min(1).max(100).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 25, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 25, 100);
         const local = await localSearchBills(term, session_year, page.limit, page.offset);
-        const localResp = await localResponse(local, page);
+        const localResp = await localResponse(local, "bills", page);
         if (localResp) return localResp;
         const results = await searchBills(apiKey, term, session_year, page.limit, page.offset);
         return answer(results, "live", page);
@@ -172,7 +193,7 @@ export async function callTool(
         const { print_no, session_year } = parseArgs(name, { print_no: z.string(), session_year: z.number().optional() }, args);
         const year = session_year ?? currentSessionYear();
         const local = await localGetBill(year, print_no);
-        const localResp = await localResponse(local);
+        const localResp = await localResponse(local, "bills");
         if (localResp) return localResp;
         const result = await getBill(apiKey, year, print_no);
         return answer(result, "live");
@@ -181,13 +202,13 @@ export async function callTool(
       case "list_bills": {
         const { session_year, limit, offset } = parseArgs(name, {
           session_year: z.number().optional(),
-          limit: z.number().int().min(1).max(500).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 25, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 25, 500);
         const year = session_year ?? currentSessionYear();
         const local = await localListBills(year, page.limit, page.offset);
-        const localResp = await localResponse(local, page);
+        const localResp = await localResponse(local, "bills", page);
         if (localResp) return localResp;
         const results = await listBills(apiKey, year, page.limit, page.offset);
         return answer(results, "live", page);
@@ -205,10 +226,10 @@ export async function callTool(
         const { from, to, limit, offset } = parseArgs(name, {
           from: z.string(),
           to: z.string(),
-          limit: z.number().int().min(1).max(500).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 50, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 50, 500);
         // Updates always fetched live by design. Same route as get_updates
         // with content_type "bills" (issue #19 merged the duplicate).
         const results = await getUpdates(apiKey, from, to, undefined, "bills", page.limit, page.offset);
@@ -221,7 +242,7 @@ export async function callTool(
         // rejected rather than ignored (issue #11).
         parseArgs(name, {}, args);
         const local = await localListLaws();
-        const localResp = await localResponse(local ? { items: local, size: local.length } : null);
+        const localResp = await localResponse(local ? { items: local, size: local.length } : null, "laws");
         if (localResp) return localResp;
         const results = await listLaws(apiKey);
         return answer(results, "live");
@@ -230,7 +251,7 @@ export async function callTool(
       case "get_law_tree": {
         const { law_id } = parseArgs(name, { law_id: z.string() }, args);
         const local = await localGetLawTree(law_id);
-        const localResp = await localResponse(local);
+        const localResp = await localResponse(local, "laws");
         if (localResp) return localResp;
         const result = await getLawTree(apiKey, law_id.toUpperCase());
         return answer(result, "live");
@@ -239,7 +260,7 @@ export async function callTool(
       case "get_law_section": {
         const { law_id, location_id } = parseArgs(name, { law_id: z.string(), location_id: z.string() }, args);
         const local = await localGetLawSection(law_id, location_id);
-        const localResp = await localResponse(local && withNysenateUrl(local));
+        const localResp = await localResponse(local && withNysenateUrl(local), "laws");
         if (localResp) return localResp;
         const result = await getLawSection(apiKey, law_id.toUpperCase(), location_id);
         return answer(result, "live");
@@ -250,13 +271,13 @@ export async function callTool(
         const { chamber, session_year, limit, offset } = parseArgs(name, {
           chamber: z.enum(["senate", "assembly"]),
           session_year: z.number().optional(),
-          limit: z.number().int().min(1).max(200).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 100, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 100, 200);
         const year = session_year ?? currentSessionYear();
         const local = await localListMembers(year, chamber, page.limit, page.offset);
-        const localResp = await localResponse(local, page);
+        const localResp = await localResponse(local, "members", page);
         if (localResp) return localResp;
         const results = await listMembers(apiKey, year, chamber, page.limit, page.offset);
         return answer(results, "live", page);
@@ -270,7 +291,7 @@ export async function callTool(
         }, args);
         const year = session_year ?? currentSessionYear();
         const local = await localGetMember(year, chamber, member_id);
-        const localResp = await localResponse(local);
+        const localResp = await localResponse(local, "members");
         if (localResp) return localResp;
         // chamber is passed so a live result from the other chamber is an
         // error, not a silent substitute (issue #17).
@@ -283,10 +304,10 @@ export async function callTool(
           term: z.string(),
           chamber: z.enum(["senate", "assembly"]).optional(),
           session_year: z.number().optional(),
-          limit: z.number().int().min(1).max(100).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 25, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 25, 100);
         // Local corpus first: chamber and session filter in SQL, rows carry
         // fullName + chamber, and it works keyless (issue #17).
         // session_year defaults to the current session, as the schema says.
@@ -294,7 +315,7 @@ export async function callTool(
         // the near-duplicate list the disambiguation rule cannot work from.
         const year = session_year ?? currentSessionYear();
         const local = await localSearchMembers(term, year, chamber, page.limit, page.offset);
-        const localResp = await localResponse(local, page);
+        const localResp = await localResponse(local, "members", page);
         if (localResp) return localResp;
         const results = await searchMembers(apiKey, term, year, chamber, page.limit, page.offset);
         return answer(results, "live", page);
@@ -305,13 +326,13 @@ export async function callTool(
         const { chamber, session_year, limit, offset } = parseArgs(name, {
           chamber: z.enum(["senate", "assembly"]),
           session_year: z.number().optional(),
-          limit: z.number().int().min(1).max(200).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 100, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 100, 200);
         const year = session_year ?? currentSessionYear();
         const local = await localListCommittees(year, chamber, page.limit, page.offset);
-        const localResp = await localResponse(local, page);
+        const localResp = await localResponse(local, "committees", page);
         if (localResp) return localResp;
         const results = await listCommittees(apiKey, year, chamber, page.limit, page.offset);
         return answer(results, "live", page);
@@ -325,7 +346,7 @@ export async function callTool(
         }, args);
         const year = session_year ?? currentSessionYear();
         const local = await localGetCommittee(year, chamber, committee_name);
-        const localResp = await localResponse(local);
+        const localResp = await localResponse(local, "committees");
         if (localResp) return localResp;
         const result = await getCommittee(apiKey, year, chamber, committee_name);
         return answer(result, "live");
@@ -336,10 +357,10 @@ export async function callTool(
           committee_name: z.string(),
           chamber: z.enum(["senate", "assembly"]),
           session_year: z.number().optional(),
-          limit: z.number().int().min(1).max(100).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 25, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 25, 100);
         // Meeting history is always fetched live — schedule changes frequently
         const results = await getCommitteeMeetings(
           apiKey,
@@ -356,13 +377,13 @@ export async function callTool(
       case "list_calendars": {
         const { year, limit, offset } = parseArgs(name, {
           year: z.number().optional(),
-          limit: z.number().int().min(1).max(200).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 50, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 50, 200);
         const calYear = year ?? new Date().getFullYear();
         const local = await localListCalendars(calYear, page.limit, page.offset);
-        const localResp = await localResponse(local, page);
+        const localResp = await localResponse(local, "calendars", page);
         if (localResp) return localResp;
         const results = await listCalendars(apiKey, calYear, page.limit, page.offset);
         return answer(results, "live", page);
@@ -371,7 +392,7 @@ export async function callTool(
       case "get_calendar": {
         const { year, calendar_no } = parseArgs(name, { year: z.number(), calendar_no: z.number() }, args);
         const local = await localGetCalendar(year, calendar_no);
-        const localResp = await localResponse(local);
+        const localResp = await localResponse(local, "calendars");
         if (localResp) return localResp;
         const result = await getCalendar(apiKey, year, calendar_no);
         return answer(result, "live");
@@ -381,13 +402,13 @@ export async function callTool(
       case "list_agendas": {
         const { year, limit, offset } = parseArgs(name, {
           year: z.number().optional(),
-          limit: z.number().int().min(1).max(200).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 50, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 50, 200);
         const agYear = year ?? new Date().getFullYear();
         const local = await localListAgendas(agYear, page.limit, page.offset);
-        const localResp = await localResponse(local, page);
+        const localResp = await localResponse(local, "agendas", page);
         if (localResp) return localResp;
         const results = await listAgendas(apiKey, agYear, page.limit, page.offset);
         return answer(results, "live", page);
@@ -396,7 +417,7 @@ export async function callTool(
       case "get_agenda": {
         const { year, agenda_no } = parseArgs(name, { year: z.number(), agenda_no: z.number() }, args);
         const local = await localGetAgenda(year, agenda_no);
-        const localResp = await localResponse(local);
+        const localResp = await localResponse(local, "agendas");
         if (localResp) return localResp;
         const result = await getAgenda(apiKey, year, agenda_no);
         return answer(result, "live");
@@ -406,13 +427,13 @@ export async function callTool(
       case "list_floor_transcripts": {
         const { year, limit, offset } = parseArgs(name, {
           year: z.number().optional(),
-          limit: z.number().int().min(1).max(200).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 50, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 50, 200);
         const ftYear = year ?? new Date().getFullYear();
         const local = await localListFloorTranscripts(ftYear, page.limit, page.offset);
-        const localResp = await localResponse(local, page);
+        const localResp = await localResponse(local, "transcripts", page);
         if (localResp) return localResp;
         const results = await listFloorTranscripts(apiKey, ftYear, page.limit, page.offset);
         return answer(results, "live", page);
@@ -422,7 +443,7 @@ export async function callTool(
         const { date_time } = parseArgs(name, { date_time: z.string() }, args);
         // Returns null from local if text wasn't fetched (--include-transcript-text not used)
         const local = await localGetFloorTranscript(date_time);
-        const localResp = await localResponse(local);
+        const localResp = await localResponse(local, "transcripts");
         if (localResp) return localResp;
         const result = await getFloorTranscript(apiKey, date_time);
         return answer(result, "live");
@@ -431,13 +452,13 @@ export async function callTool(
       case "list_hearing_transcripts": {
         const { year, limit, offset } = parseArgs(name, {
           year: z.number().optional(),
-          limit: z.number().int().min(1).max(200).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 50, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 50, 200);
         const htYear = year ?? new Date().getFullYear();
         const local = await localListHearingTranscripts(htYear, page.limit, page.offset);
-        const localResp = await localResponse(local, page);
+        const localResp = await localResponse(local, "transcripts", page);
         if (localResp) return localResp;
         const results = await listHearingTranscripts(apiKey, htYear, page.limit, page.offset);
         return answer(results, "live", page);
@@ -447,7 +468,7 @@ export async function callTool(
         const { filename } = parseArgs(name, { filename: z.string() }, args);
         // Returns null from local if text wasn't fetched (--include-transcript-text not used)
         const local = await localGetHearingTranscript(filename);
-        const localResp = await localResponse(local);
+        const localResp = await localResponse(local, "transcripts");
         if (localResp) return localResp;
         const result = await getHearingTranscript(apiKey, filename);
         return answer(result, "live");
@@ -460,10 +481,10 @@ export async function callTool(
           to: z.string(),
           type: z.enum(["processed", "published"]).optional(),
           content_type: z.enum(["bills", "agendas", "calendars", "laws"]).optional(),
-          limit: z.number().int().min(1).max(500).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 50, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 50, 500);
         const results = await getUpdates(
           apiKey,
           from,
@@ -482,10 +503,10 @@ export async function callTool(
           term: z.string(),
           type: z.string().optional(),
           session_year: z.number().optional(),
-          limit: z.number().int().min(1).max(100).optional(),
-          offset: z.number().int().min(0).optional(),
+          limit: LIMIT,
+          offset: OFFSET,
         }, args);
-        const page = { limit: limit ?? 25, offset: offset ?? 0 };
+        const page = pageOf(limit, offset, 25, 100);
         const results = await search(
           apiKey,
           term,
@@ -518,6 +539,10 @@ export function errorResult(name: string, err: unknown, apiKey: ApiKey): CallToo
     // that the fix is configuration, not a retry. Static text, so not passed through toolError,
     // whose "Error: " prefix would read as the generic failure this message replaced.
     return { content: [{ type: "text", text: `Tool '${name}' requires the live NYS Open Legislation API. ${err.message}` }], isError: true };
+  }
+  if (err instanceof ParseArgsError) {
+    // Already names the tool and what it accepts: passed on once, not wrapped in "<tool> failed:".
+    return toolError(err.message, { secrets });
   }
   if (err instanceof z.ZodError) {
     const issues = err.issues.map((i) => `${i.path.join(".") || "arguments"}: ${i.message}`).join("; ");

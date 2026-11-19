@@ -140,7 +140,8 @@ test("a network failure and a success:false answer are plain sentences without t
 
 test("bad arguments are named in a sentence, not a JSON dump", async () => {
   const calls = mockFetch(ok({ result: {} }));
-  const r = await callTool(KEY, "search_bills", { term: "x", limit: 5000 });
+  // A limit over the maximum is lowered, not refused; a limit under 1 is refused.
+  const r = await callTool(KEY, "search_bills", { term: "x", limit: 0 });
   assert.equal(r.isError, true);
   assert.equal(calls.length, 0);
   assert.match(text(r), /^Error: Invalid arguments for search_bills: limit: .+\. Fix them and call search_bills again\.$/);
